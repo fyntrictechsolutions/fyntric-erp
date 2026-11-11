@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* `dark:` utilities apply when <html data-theme="dark"> is set by the theme switch. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Theme colours, matching the Fyntric Tech website.
+ * Components use semantic names (bg-background, bg-surface, text-foreground, border-line…)
+ * so one class works in both themes. Light is the default; dark overrides below.
+ */
+:root {
+  --theme-background: #f3f6fb;
+  --theme-surface: #ffffff;
+  --theme-surface-2: #e9eef8;
+  --theme-foreground: #0b1033;
+  --theme-body: #2b3552;
+  --theme-muted: #475273;
+  --theme-subtle: #636e8f;
+  --theme-line: rgb(11 16 51 / 0.12);
+  --theme-line-strong: rgb(11 16 51 / 0.22);
+  --theme-tint: rgb(11 16 51 / 0.04);
+  --theme-tint-strong: rgb(11 16 51 / 0.08);
+  --theme-accent: #0a5fe0;
+  --theme-accent-soft: #eaf3ff;
+  --theme-card-shadow: 0 1px 2px rgb(11 16 51 / 0.05), 0 12px 32px -20px rgb(11 16 51 / 0.25);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --theme-background: #04051a;
+  --theme-surface: #070a2b;
+  --theme-surface-2: #0c1040;
+  --theme-foreground: #ffffff;
+  --theme-body: #cbd5e1;
+  --theme-muted: #94a3b8;
+  --theme-subtle: #64748b;
+  --theme-line: rgb(255 255 255 / 0.09);
+  --theme-line-strong: rgb(255 255 255 / 0.16);
+  --theme-tint: rgb(255 255 255 / 0.03);
+  --theme-tint-strong: rgb(255 255 255 / 0.07);
+  --theme-accent: #74adff;
+  --theme-accent-soft: rgb(116 173 255 / 0.12);
+  --theme-card-shadow: none;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--theme-background);
+  --color-surface: var(--theme-surface);
+  --color-surface-2: var(--theme-surface-2);
+  --color-foreground: var(--theme-foreground);
+  --color-body: var(--theme-body);
+  --color-muted: var(--theme-muted);
+  --color-subtle: var(--theme-subtle);
+  --color-line: var(--theme-line);
+  --color-line-strong: var(--theme-line-strong);
+  --color-tint: var(--theme-tint);
+  --color-tint-strong: var(--theme-tint-strong);
+  --color-accent: var(--theme-accent);
+  --color-accent-soft: var(--theme-accent-soft);
+  --shadow-card: var(--theme-card-shadow);
+}
+
+/* Fixed brand palette (same in both themes), taken from the Fyntric Tech logo. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink-950: #04051a;
+  --color-ink-900: #070a2b;
+  --color-ink-800: #0c1040;
+  --color-brand-50: #eaf3ff;
+  --color-brand-100: #d2e5ff;
+  --color-brand-300: #74adff;
+  --color-brand-400: #3f8dff;
+  --color-brand-500: #1677ff;
+  --color-brand-600: #0a5fe0;
+  --color-brand-700: #0b4bb3;
+  --color-accent-cyan: #2ee6ff;
+  --color-accent-violet: #8b6cff;
+
+  --animate-fade-up: fade-up 0.35s ease-out both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+body {
+  background: var(--theme-background);
+  color: var(--theme-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

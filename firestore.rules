@@ -1,0 +1,177 @@
+rules_version = '2';
+
+// Server-side access control for Fyntric ERP.
+// Mirrors the permission matrix in src/config/roles.ts. Change both together
+// (see docs/roles-and-permissions.md). Deploy with: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Who is asking ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function me() {
+      return get(profilePath()).data;
+    }
+
+    // The caller's role, or "none" if signed out, not registered, or disabled.
+    function role() {
+      return signedIn() && exists(profilePath()) && me().active == true ? me().role : 'none';
+    }
+
+    function hasRole(roles) {
+      return role() in roles;
+    }
+
+    // Fyntric employees (not clients, investors or viewers).
+    function internal() {
+      return hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'staff']);
+    }
+
+    // ---------- Record helpers ----------
+
+    function isOwner() {
+      return resource.data.userId == request.auth.uid;
+    }
+
+    // New records must be stamped with the creator's own uid.
+    function createsOwn() {
+      return request.resource.data.userId == request.auth.uid;
+    }
+
+    function unchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Ownership fields can never be rewritten.
+    function keepsOwner() {
+      return unchanged(['userId', 'userName', 'createdBy', 'createdAt']);
+    }
+
+    // A client user reading records linked to their company.
+    function isMyClientRecord() {
+      return role() == 'client' && me().clientId != null && resource.data.clientId == me().clientId;
+    }
+
+    // ---------- Collections ----------
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || role() == 'admin');
+      // First sign-in registers the user as "pending" until an admin assigns a role.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'pending'
+        && request.resource.data.active == true;
+      // Admins manage everyone, but can't change their own role or disable themselves.
+      allow update: if role() == 'admin' && (uid != request.auth.uid || unchanged(['role', 'active']));
+      // Anyone can update their own name and photo.
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']);
+      allow delete: if role() == 'admin' && uid != request.auth.uid;
+    }
+
+    // HR
+
+    match /employees/{id} {
+      allow read: if internal();
+      allow create: if hasRole(['admin', 'hr_manager']) && createsOwn();
+      allow update: if hasRole(['admin', 'hr_manager']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'hr_manager']);
+    }
+
+    match /attendance/{id} {
+      allow read: if hasRole(['admin', 'hr_manager']) || (internal() && isOwner());
+      allow create: if internal() && createsOwn();
+      allow update: if keepsOwner() && (
+        hasRole(['admin', 'hr_manager'])
+        // Staff can add their check-out time and notes, not move their check-in.
+        || (internal() && isOwner() && unchanged(['date', 'checkIn', 'workMode']))
+      );
+      allow delete: if hasRole(['admin', 'hr_manager']) || (internal() && isOwner());
+    }
+
+    match /leave/{id} {
+      allow read: if hasRole(['admin', 'hr_manager']) || (internal() && isOwner());
+      allow create: if createsOwn() && (
+        hasRole(['admin', 'hr_manager'])
+        || (internal() && request.resource.data.status == 'pending')
+      );
+      allow update: if keepsOwner() && (
+        hasRole(['admin', 'hr_manager'])
+        // Staff can edit their own request while it's pending, but can't approve it.
+        || (internal() && isOwner() && resource.data.status == 'pending'
+            && request.resource.data.status == 'pending'
+            && unchanged(['reviewNote', 'reviewedBy']))
+      );
+      allow delete: if hasRole(['admin', 'hr_manager'])
+        || (internal() && isOwner() && resource.data.status == 'pending');
+    }
+
+    // CRM
+
+    match /leads/{id} {
+      allow read: if hasRole(['admin', 'sales', 'project_manager', 'viewer']);
+      allow create: if hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
+    match /clients/{id} {
+      allow read: if hasRole(['admin', 'sales', 'project_manager', 'investor', 'viewer']);
+      allow create: if hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
+    // Projects
+
+    match /projects/{id} {
+      allow read: if internal() || hasRole(['investor', 'viewer']) || isMyClientRecord();
+      allow create: if hasRole(['admin', 'project_manager']) && createsOwn();
+      allow update: if hasRole(['admin', 'project_manager']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'project_manager']);
+    }
+
+    match /timesheets/{id} {
+      allow read: if hasRole(['admin', 'project_manager']) || (internal() && isOwner());
+      allow create: if internal() && createsOwn();
+      allow update: if keepsOwner() && (hasRole(['admin', 'project_manager']) || (internal() && isOwner()));
+      allow delete: if hasRole(['admin', 'project_manager']) || (internal() && isOwner());
+    }
+
+    // Finance
+
+    match /invoices/{id} {
+      allow read: if hasRole(['admin', 'sales', 'project_manager', 'investor']) || isMyClientRecord();
+      allow create: if hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if role() == 'admin';
+    }
+
+    match /expenses/{id} {
+      allow read: if hasRole(['admin', 'investor']) || (internal() && isOwner());
+      allow create: if createsOwn() && (
+        role() == 'admin'
+        || (internal() && request.resource.data.status == 'pending')
+      );
+      allow update: if keepsOwner() && (
+        role() == 'admin'
+        || (internal() && isOwner() && resource.data.status == 'pending'
+            && request.resource.data.status == 'pending')
+      );
+      allow delete: if role() == 'admin'
+        || (internal() && isOwner() && resource.data.status == 'pending');
+    }
+
+    // Anything not listed above is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
