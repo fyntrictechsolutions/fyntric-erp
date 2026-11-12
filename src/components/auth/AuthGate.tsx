@@ -8,6 +8,7 @@ import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FullPageSpinner } from "@/components/ui/Spinner";
+import { ROLES } from "@/config/roles";
 import { siteConfig } from "@/config/site";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "./AuthProvider";
@@ -31,7 +32,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         icon={<Clock className="size-6" />}
         title={pending ? "Waiting for access" : "Account disabled"}
         body={
-          pending
+          profile.invalidRole !== undefined
+            ? `Your role is set to "${profile.invalidRole}", which isn't a role Fyntric ERP knows. In Firestore > users, set role to exactly one of: ${ROLES.join(", ")} (lowercase).`
+            : pending
             ? `You're signed in as ${profile.email}. An admin needs to give you a role before you can use ${siteConfig.name}. This page will update by itself once that's done.`
             : `Your account has been turned off. Contact ${siteConfig.supportEmail} if you think this is a mistake.`
         }

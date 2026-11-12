@@ -14,6 +14,8 @@ export interface UserProfile {
   employeeId?: string;
   employeeIdLabel?: string;
   active: boolean;
+  /** Set when the stored role isn't one the app knows (e.g. mistyped in the console). */
+  invalidRole?: string;
   createdAt?: number;
   updatedAt?: number;
 }
