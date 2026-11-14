@@ -4,6 +4,7 @@ import { expensesModule, invoicesModule, paymentsModule } from "./finance";
 import { attendanceModule, employeesModule, leaveModule } from "./hr";
 import { projectsModule, timesheetsModule } from "./projects";
 import { purchasesModule, suppliersModule } from "./purchases";
+import { candidatesModule } from "./hiring";
 import { estimatesModule, followupsModule, productsModule } from "./sales";
 import type { ModuleDefinition } from "./types";
 
@@ -23,6 +24,7 @@ export const MODULES: Partial<Record<ModuleKey, ModuleDefinition>> = {
   timesheets: timesheetsModule,
   suppliers: suppliersModule,
   purchases: purchasesModule,
+  candidates: candidatesModule,
   invoices: invoicesModule,
   payments: paymentsModule,
   expenses: expensesModule,

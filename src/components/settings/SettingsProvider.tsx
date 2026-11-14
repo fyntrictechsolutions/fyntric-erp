@@ -6,7 +6,9 @@ import {
   DEFAULT_APP,
   DEFAULT_BUSINESS,
   DEFAULT_LISTS,
+  DEFAULT_OFFER,
   type AppSettings,
+  type OfferSettings,
   type BusinessSettings,
   type ListSettings,
 } from "@/config/settingsDefaults";
@@ -16,11 +18,12 @@ export interface Settings {
   business: BusinessSettings;
   lists: ListSettings;
   app: AppSettings;
+  offer: OfferSettings;
 }
 
 export type SettingsSection = keyof Settings;
 
-const DEFAULTS: Settings = { business: DEFAULT_BUSINESS, lists: DEFAULT_LISTS, app: DEFAULT_APP };
+const DEFAULTS: Settings = { business: DEFAULT_BUSINESS, lists: DEFAULT_LISTS, app: DEFAULT_APP, offer: DEFAULT_OFFER };
 const SettingsContext = createContext<Settings>(DEFAULTS);
 
 /** Live company settings for everyone signed in, falling back to the defaults. */
@@ -28,7 +31,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [stored, setStored] = useState<Partial<Record<SettingsSection, object>>>({});
 
   useEffect(() => {
-    const unsubs = (["business", "lists", "app"] as const).map((section) =>
+    const unsubs = (["business", "lists", "app", "offer"] as const).map((section) =>
       onSnapshot(
         doc(db(), "settings", section),
         (snap) => setStored((s) => ({ ...s, [section]: snap.exists() ? snap.data() : {} })),
@@ -43,6 +46,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       business: { ...DEFAULT_BUSINESS, ...(stored.business as Partial<BusinessSettings>) },
       lists: { ...DEFAULT_LISTS, ...(stored.lists as Partial<ListSettings>) },
       app: { ...DEFAULT_APP, ...(stored.app as Partial<AppSettings>) },
+      offer: { ...DEFAULT_OFFER, ...(stored.offer as Partial<OfferSettings>) },
     }),
     [stored],
   );

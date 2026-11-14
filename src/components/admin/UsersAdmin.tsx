@@ -245,7 +245,7 @@ function appUrl() {
 }
 
 /** Copy / WhatsApp / email buttons for sending an invitation. */
-function ShareInvite({ invite }: { invite: Pick<Invite, "name" | "email" | "role"> }) {
+export function ShareInvite({ invite }: { invite: Pick<Invite, "name" | "email" | "role"> }) {
   const settings = useSettings();
   const [copied, setCopied] = useState(false);
   const text = inviteMessage(invite, ROLE_LABELS[invite.role], appUrl(), settings.business.name);

@@ -14,11 +14,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { attendanceModule, employeesModule, leaveModule } from "@/config/modules/hr";
 import { APPROVAL_STATUS } from "@/config/modules/options";
 import { canRead } from "@/config/roles";
-import { useRecord, useRecordsWhere } from "@/hooks/useCollection";
+import { useRecord } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
 import { buildDayMap, daysInMonth, type DayInfo, type DayStatus, eachDate, iso } from "@/lib/attendanceCalendar";
 import { cn } from "@/lib/cn";
-import { formatDate, todayISO } from "@/lib/format";
+import { formatDate, hoursBetween, nowTime, todayISO } from "@/lib/format";
+import { MonthlyReportButton } from "./MonthlyReport";
+import { usePersonRecords } from "@/hooks/usePersonRecords";
+import { SalaryTab } from "./SalaryTab";
+import { ExitTab } from "./ExitTab";
 import type { BaseRecord } from "@/types";
 
 export function EmployeeDetailPage() {
@@ -27,19 +31,7 @@ export function EmployeeDetailPage() {
   return <WithRecordId>{(id) => <EmployeeDetail id={id} />}</WithRecordId>;
 }
 
-type Tab = "details" | "attendance";
-
-/** Records of one person: matched on the employee link, and on their login account when it's known. */
-function usePersonRecords(module: "attendance" | "leave", employeeId: string, accountId: string | null) {
-  const byEmployee = useRecordsWhere(module, "employeeId", employeeId);
-  const byAccount = useRecordsWhere(module, "userId", accountId);
-  const data = useMemo(() => {
-    const seen = new Map<string, BaseRecord>();
-    for (const r of [...byEmployee.data, ...byAccount.data]) seen.set(r.id, r);
-    return [...seen.values()];
-  }, [byEmployee.data, byAccount.data]);
-  return { data, loading: byEmployee.loading || byAccount.loading, error: byEmployee.error ?? byAccount.error };
-}
+type Tab = "details" | "attendance" | "salary" | "exit";
 
 function EmployeeDetail({ id }: { id: string }) {
   const profile = useProfile();
@@ -75,6 +67,8 @@ function EmployeeDetail({ id }: { id: string }) {
         tabs={[
           { value: "details", label: "Basic details" },
           { value: "attendance", label: "Attendance" },
+          ...(canRead(profile.role, "salaries") ? [{ value: "salary" as const, label: "Salary structure" }] : []),
+          ...(canRead(profile.role, "exits") ? [{ value: "exit" as const, label: "Resignation" }] : []),
         ]}
         value={tab}
         onChange={setTab}
@@ -87,8 +81,12 @@ function EmployeeDetail({ id }: { id: string }) {
             <p className="mt-5 text-xs text-subtle">Signs in as {String(employee.accountEmail)}</p>
           )}
         </Card>
-      ) : (
+      ) : tab === "attendance" ? (
         <AttendanceTab employee={employee} />
+      ) : tab === "salary" ? (
+        <SalaryTab employee={employee} />
+      ) : (
+        <ExitTab employee={employee} />
       )}
 
       {editing && <RecordEditor module={employeesModule} record={employee} onClose={() => setEditing(false)} />}
@@ -138,6 +136,23 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
     [attendance.data, leave.data, settings.lists.holidays, workHours, today, startDate],
   );
 
+  const todayInfo = (() => {
+    const d = dayOf(today);
+    const a = d.attendance;
+    if (!a) {
+      const label = d.status === "leave" ? "On leave" : d.status === "off" ? "Holiday" : "Not yet";
+      return { checkIn: label, checkInHint: `Office opens ${settings.app.officeOpenTime}`, hours: "0", hoursHint: `of ${workHours}h` };
+    }
+    const late = typeof a.checkIn === "string" && a.checkIn > settings.app.officeOpenTime;
+    let hours = Number(a.hours) || 0;
+    let hoursHint = `of ${workHours}h`;
+    if (!a.checkOut) {
+      hours = hoursBetween(a.checkIn, nowTime()) ?? 0;
+      hoursHint = `so far, not checked out`;
+    }
+    return { checkIn: String(a.checkIn ?? "—"), checkInHint: late ? `Late (office opens ${settings.app.officeOpenTime})` : "On time", hours: String(Math.round(hours * 10) / 10), hoursHint };
+  })();
+
   const stats = useMemo(() => {
     const monthStart = `${today.slice(0, 7)}-01`;
     const yearStart = `${year}-01-01`;
@@ -166,7 +181,9 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Stat label="Check-in today" value={todayInfo.checkIn} hint={todayInfo.checkInHint} />
+        <Stat label="Working hours today" value={todayInfo.hours} hint={todayInfo.hoursHint} />
         <Stat label="Full days this month" value={stats.month.present} hint={`${stats.month.short} short or missing`} />
         <Stat label="Leave this month" value={stats.leaveMonth} hint="Approved working days" />
         <Stat label={`Full days in ${year}`} value={stats.year.present} hint={`${stats.year.short} short or missing`} />
@@ -175,7 +192,8 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
 
       <Card className="p-4 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-base font-semibold text-foreground">Attendance calendar</h2>
+          <h2 className="flex-1 font-display text-base font-semibold text-foreground">Attendance calendar</h2>
+          <MonthlyReportButton employeeId={employee.id} />
           <div className="flex items-center gap-1">
             <Button size="sm" variant="ghost" onClick={() => setYear((y) => y - 1)} disabled={year <= firstYear} aria-label="Previous year">
               <ChevronLeft className="size-4" />
@@ -240,7 +258,7 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
+function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
     <Card className="p-4">
       <p className="text-xs font-medium text-muted">{label}</p>

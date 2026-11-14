@@ -1,6 +1,6 @@
 import { CalendarClock, Check, FileSignature, Package, Send } from "lucide-react";
 import { todayISO } from "@/lib/format";
-import { lineTotals } from "@/lib/lineItems";
+import { discountedTotals } from "@/lib/lineItems";
 import { ACTIVE_STATUS, addDays, BILLING_CYCLES, docNumber } from "./options";
 import type { LineItem, ModuleDefinition, SelectOption } from "./types";
 
@@ -106,20 +106,16 @@ export const estimatesModule: ModuleDefinition = {
     { name: "notes", label: "Notes for the client", type: "textarea", wide: true },
     { name: "terms", label: "Terms", type: "textarea", wide: true, defaultValue: ({ settings }) => settings.app.estimateTerms },
   ],
+  validate: (v) => (Array.isArray(v.items) && v.items.length ? null : "Add at least one item."),
   beforeSave: (data, { settings }) => {
-    const items = (data.items as LineItem[] | undefined) ?? [];
-    const { subtotal, taxTotal } = lineTotals(items);
-    const discount = Math.min(Number(data.discount) || 0, subtotal);
-    // Discount reduces the taxable value proportionally.
-    const ratio = subtotal ? (subtotal - discount) / subtotal : 1;
-    const tax = Math.round(taxTotal * ratio * 100) / 100;
+    const t = discountedTotals((data.items as LineItem[] | undefined) ?? [], data.discount);
     return {
       ...data,
       estimateNumber: (data.estimateNumber as string)?.trim() || docNumber(settings.business.estimatePrefix),
-      subtotal,
-      discount: discount || null,
-      taxTotal: tax,
-      total: Math.round((subtotal - discount + tax) * 100) / 100,
+      subtotal: t.subtotal,
+      discount: t.discount || null,
+      taxTotal: t.taxTotal,
+      total: t.total,
     };
   },
   actions: [

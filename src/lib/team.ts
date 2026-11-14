@@ -28,19 +28,20 @@ export function isEmployeeRole(role: UserRole): boolean {
   return (EMPLOYEE_ROLES as UserRole[]).includes(role);
 }
 
-/** Creates the employee record for a team member (admins only). Returns its id and display name. */
+/** Creates the employee record for a team member (Admin, or HR when hiring). Returns its id and display name. */
 export async function createEmployeeFor(
-  person: { name: string; email: string; accountId?: string },
+  person: { name: string; email: string; accountId?: string; details?: Record<string, unknown> },
   admin: UserProfile,
 ): Promise<{ id: string; label: string }> {
   const ref = await createRecord(
     "employees",
     {
+      ...person.details,
       fullName: person.name,
       email: person.email,
       status: "active",
       employmentType: "full_time",
-      joiningDate: todayISO(),
+      joiningDate: person.details?.joiningDate ?? todayISO(),
       accountId: person.accountId ?? null,
       accountEmail: person.email,
       // The employee record belongs to the person, not to the admin who created it.
@@ -53,7 +54,7 @@ export async function createEmployeeFor(
 
 /** Saves an invitation. Team roles get their employee record straight away. */
 export async function createInvite(
-  input: { email: string; name: string; role: Role; clientId?: string; clientIdLabel?: string },
+  input: { email: string; name: string; role: Role; clientId?: string; clientIdLabel?: string; employeeDetails?: Record<string, unknown> },
   admin: UserProfile,
 ): Promise<Invite> {
   const id = inviteId(input.email);
@@ -62,7 +63,7 @@ export async function createInvite(
   if (existing.exists() && existing.data().employeeId) {
     employee = { id: existing.data().employeeId, label: existing.data().employeeIdLabel ?? input.name };
   } else if (isEmployeeRole(input.role)) {
-    employee = await createEmployeeFor({ name: input.name, email: id }, admin);
+    employee = await createEmployeeFor({ name: input.name, email: id, details: input.employeeDetails }, admin);
   }
   const invite: Invite = {
     id,

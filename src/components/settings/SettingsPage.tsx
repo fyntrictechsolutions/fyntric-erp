@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/Card";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { canRead, ROLE_LABELS, ROLES, type ModuleKey } from "@/config/roles";
-import { LIST_META, type BusinessSettings, type Holiday, type ListKey } from "@/config/settingsDefaults";
+import { LIST_META, OFFER_PLACEHOLDERS, type BusinessSettings, type Holiday, type ListKey } from "@/config/settingsDefaults";
 import { useLiveQuery } from "@/hooks/useCollection";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/firebase";
@@ -23,7 +23,7 @@ import { formatDate, todayISO } from "@/lib/format";
 import type { BaseRecord, UserProfile } from "@/types";
 import { saveSettings, useSettings, type Settings, type SettingsSection } from "./SettingsProvider";
 
-type Tab = "business" | "team" | "lists" | "data" | "app";
+type Tab = "business" | "team" | "lists" | "offer" | "data" | "app";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function SettingsPage() {
@@ -40,6 +40,7 @@ export function SettingsPage() {
           { value: "business", label: "Business" },
           { value: "team", label: "Team" },
           { value: "lists", label: "Lists" },
+          { value: "offer", label: "Offer letter" },
           { value: "data", label: "Data" },
           { value: "app", label: "App" },
         ]}
@@ -50,6 +51,7 @@ export function SettingsPage() {
       {tab === "team" && <TeamTab />}
       {tab === "lists" && <ListsTab onState={setState} />}
       {tab === "data" && <DataTab />}
+      {tab === "offer" && <OfferTab onState={setState} />}
       {tab === "app" && <AppTab onState={setState} />}
     </div>
   );
@@ -275,7 +277,7 @@ function HolidayEditor({ items, onChange }: { items: Holiday[]; onChange: (items
 }
 
 const EXPORT_COLLECTIONS: (ModuleKey | "users")[] = [
-  "employees", "attendance", "leave", "leads", "followups", "estimates", "clients", "products", "projects", "timesheets",
+  "employees", "attendance", "leave", "candidates", "salaries", "exits", "leads", "followups", "estimates", "clients", "products", "projects", "timesheets",
   "suppliers", "purchases", "invoices", "payments", "expenses", "users",
 ];
 
@@ -376,6 +378,15 @@ function AppTab({ onState }: { onState: (s: SaveState) => void }) {
             <p className="mt-1 text-xs text-subtle">A day with fewer hours shows red on the attendance calendar.</p>
           </div>
           <div>
+            <label htmlFor="a-open" className={labelClasses}>Office opens at</label>
+            <input id="a-open" type="time" className={inputClasses} value={values.officeOpenTime} onChange={(e) => set("officeOpenTime", e.target.value)} />
+            <p className="mt-1 text-xs text-subtle">A check-in after this counts as late.</p>
+          </div>
+          <div>
+            <label htmlFor="a-close" className={labelClasses}>Office closes at</label>
+            <input id="a-close" type="time" className={inputClasses} value={values.officeCloseTime} onChange={(e) => set("officeCloseTime", e.target.value)} />
+          </div>
+          <div>
             <label htmlFor="a-tax" className={labelClasses}>Default GST (%)</label>
             <input id="a-tax" type="number" min={0} max={100} className={inputClasses} value={values.defaultTaxRate} onChange={(e) => set("defaultTaxRate", num(e.target.value))} />
           </div>
@@ -397,5 +408,52 @@ function AppTab({ onState }: { onState: (s: SaveState) => void }) {
         <ThemeToggle />
       </Card>
     </div>
+  );
+}
+
+function OfferTab({ onState }: { onState: (s: SaveState) => void }) {
+  const { values, set } = useAutosave("offer", onState);
+  return (
+    <Card className="p-5 sm:p-6">
+      <h2 className="font-display text-base font-semibold text-foreground">Offer letter format</h2>
+      <p className="mb-2 text-sm text-muted">
+        The common wording of every offer letter. When HR prepares an offer for a candidate, the blanks in curly braces are filled in and the finished letter is saved with the candidate.
+      </p>
+      <p className="mb-5 flex flex-wrap gap-1.5 text-xs">
+        {OFFER_PLACEHOLDERS.map((p) => (
+          <code key={p} className="rounded bg-tint-strong px-1.5 py-0.5 text-muted">{`{${p}}`}</code>
+        ))}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label htmlFor="o-subject" className={labelClasses}>Subject</label>
+          <input id="o-subject" className={inputClasses} value={values.subject} onChange={(e) => set("subject", e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="o-body" className={labelClasses}>Letter</label>
+          <textarea id="o-body" rows={12} className={inputClasses} value={values.body} onChange={(e) => set("body", e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="o-terms" className={labelClasses}>Terms (one per line)</label>
+          <textarea id="o-terms" rows={4} className={inputClasses} value={values.terms} onChange={(e) => set("terms", e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="o-sname" className={labelClasses}>Signed by (name)</label>
+          <input id="o-sname" className={inputClasses} value={values.signatoryName} onChange={(e) => set("signatoryName", e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="o-stitle" className={labelClasses}>Signatory designation</label>
+          <input id="o-stitle" className={inputClasses} value={values.signatoryTitle} onChange={(e) => set("signatoryTitle", e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="o-prob" className={labelClasses}>Default probation (months)</label>
+          <input id="o-prob" type="number" min={0} className={inputClasses} value={values.probationMonths} onChange={(e) => set("probationMonths", Number(e.target.value) || 0)} />
+        </div>
+        <div>
+          <label htmlFor="o-notice" className={labelClasses}>Default notice period (days)</label>
+          <input id="o-notice" type="number" min={0} className={inputClasses} value={values.noticePeriodDays} onChange={(e) => set("noticePeriodDays", Number(e.target.value) || 0)} />
+        </div>
+      </div>
+    </Card>
   );
 }
