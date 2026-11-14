@@ -106,3 +106,21 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing an estimate: plain white page, only the document. */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    border: 0 !important;
+    color: #0b1020 !important;
+    background: #fff !important;
+  }
+}

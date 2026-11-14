@@ -47,7 +47,7 @@ export async function createRecord(module: ModuleKey, data: Record<string, unkno
       userId: profile.id,
       userName: profile.displayName,
       // Lets HR see a person's attendance and leave on their employee page.
-      employeeId: (data.employeeId as string | undefined) ?? profile.employeeId ?? null,
+      employeeId: "employeeId" in data ? (data.employeeId ?? null) : (profile.employeeId ?? null),
       createdBy: profile.id,
       createdAt: now,
       updatedAt: now,

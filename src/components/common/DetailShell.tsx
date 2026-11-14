@@ -7,6 +7,10 @@ import { Suspense } from "react";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import { FieldValue } from "@/components/resource/FieldValue";
+import type { ModuleDefinition } from "@/config/modules";
+import type { Role } from "@/config/roles";
+import type { BaseRecord } from "@/types";
 
 /** Reads ?id= from the URL (static pages can't have dynamic segments) and renders the detail view. */
 export function WithRecordId({ children }: { children: (id: string) => React.ReactNode }) {
@@ -58,5 +62,54 @@ export function DetailGrid({ items }: { items: { label: string; value: React.Rea
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Every visible field of a record as a detail grid, using the module's own labels and formatting. */
+export function RecordFields({
+  module,
+  record,
+  role,
+  exclude = [],
+}: {
+  module: ModuleDefinition;
+  record: BaseRecord;
+  role?: string;
+  exclude?: string[];
+}) {
+  const fields = module.fields.filter(
+    (f) => !f.hidden && f.type !== "items" && !exclude.includes(f.name) && !f.hiddenFor?.includes(role as Role),
+  );
+  return (
+    <DetailGrid
+      items={fields.map((f) => ({
+        label: f.label,
+        wide: f.type === "textarea" || f.wide,
+        value: <span className="whitespace-pre-line"><FieldValue field={f} record={record} /></span>,
+      }))}
+    />
+  );
+}
+
+/** Simple underlined tab bar. */
+export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-line px-1" role="tablist">
+      {tabs.map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          role="tab"
+          aria-selected={value === t.value}
+          onClick={() => onChange(t.value)}
+          className={
+            "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors " +
+            (value === t.value ? "border-brand-500 text-accent" : "border-transparent text-muted hover:text-foreground")
+          }
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
