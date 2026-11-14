@@ -5,11 +5,11 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useSettings } from "@/components/settings/SettingsProvider";
 import { Button } from "@/components/ui/Button";
 import { inputClasses } from "@/components/ui/fieldStyles";
-import type { LineItem } from "@/config/modules";
+import type { Billing, LineItem } from "@/config/modules";
 import { useModuleRecords } from "@/hooks/useCollection";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
-import { lineTotals } from "@/lib/lineItems";
+import { BILLING_GROUPS, billingOf, groupedTotals } from "@/lib/lineItems";
 
 const cell = cn(inputClasses, "px-2 py-1.5");
 
@@ -39,14 +39,15 @@ export function LineItemsEditor({ value, onChange }: { value: LineItem[]; onChan
       description: [cycle, p.description].filter(Boolean).join(" · "),
       unit: String(p.unit ?? (p.isSubscription ? (p.billingCycle === "annually" ? "Year" : "Month") : "Nos")),
       rate: Number(p.price) || 0,
+      billing: (p.isSubscription ? (p.billingCycle === "annually" ? "annually" : "monthly") : "once") as Billing,
       taxRate: p.taxRate === undefined || p.taxRate === null ? settings.app.defaultTaxRate : Number(p.taxRate),
     });
   };
 
   const add = () =>
-    onChange([...value, { name: "", qty: 1, unit: "Nos", rate: 0, taxRate: settings.app.defaultTaxRate, amount: 0 }]);
+    onChange([...value, { name: "", qty: 1, unit: "Nos", rate: 0, taxRate: settings.app.defaultTaxRate, amount: 0, billing: "once" }]);
   const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
-  const totals = lineTotals(value);
+  const groups = groupedTotals(value);
 
   return (
     <div className="rounded-xl border border-line">
@@ -72,6 +73,11 @@ export function LineItemsEditor({ value, onChange }: { value: LineItem[]; onChan
               </select>
               <input className={cell} placeholder="Item name" required value={it.name} onChange={(e) => update(i, { name: e.target.value })} aria-label="Item name" />
               <input className={cell} placeholder="Description (optional)" value={it.description ?? ""} onChange={(e) => update(i, { description: e.target.value })} aria-label="Description" />
+              <select className={cell} value={billingOf(it)} onChange={(e) => update(i, { billing: e.target.value as Billing })} aria-label="Billing">
+                {BILLING_GROUPS.map((g) => (
+                  <option key={g.key} value={g.key}>{g.key === "once" ? "One-time" : `${g.short} (recurring)`}</option>
+                ))}
+              </select>
             </div>
             <label className="text-xs text-muted md:text-[0px]">
               <span className="md:hidden">Qty</span>
@@ -96,14 +102,19 @@ export function LineItemsEditor({ value, onChange }: { value: LineItem[]; onChan
         <Button size="sm" variant="secondary" onClick={add}>
           <Plus className="size-3.5" /> Add item
         </Button>
-        <dl className="grid grid-cols-[auto_8rem] gap-x-6 gap-y-1 text-sm">
-          <dt className="text-muted">Subtotal</dt>
-          <dd className="text-right tabular-nums">{formatCurrency(totals.subtotal)}</dd>
-          <dt className="text-muted">GST</dt>
-          <dd className="text-right tabular-nums">{formatCurrency(totals.taxTotal)}</dd>
-          <dt className="font-semibold text-foreground">Total</dt>
-          <dd className="text-right font-semibold text-foreground tabular-nums">{formatCurrency(totals.total)}</dd>
-        </dl>
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <dl key={g.key} className="grid grid-cols-[auto_8rem] gap-x-6 gap-y-1 text-sm">
+              {groups.length > 1 && <dt className="col-span-2 text-xs font-semibold tracking-wide text-muted uppercase">{g.label}</dt>}
+              <dt className="text-muted">Subtotal</dt>
+              <dd className="text-right tabular-nums">{formatCurrency(g.subtotal)}</dd>
+              <dt className="text-muted">GST</dt>
+              <dd className="text-right tabular-nums">{formatCurrency(g.taxTotal)}</dd>
+              <dt className="font-semibold text-foreground">Total{g.per}</dt>
+              <dd className="text-right font-semibold text-foreground tabular-nums">{formatCurrency(g.total)}</dd>
+            </dl>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { CalendarClock, Check, FileSignature, Package, Send } from "lucide-react";
 import { todayISO } from "@/lib/format";
-import { discountedTotals } from "@/lib/lineItems";
+import { groupedTotals, groupFields } from "@/lib/lineItems";
 import { ACTIVE_STATUS, addDays, BILLING_CYCLES, docNumber } from "./options";
 import type { LineItem, ModuleDefinition, SelectOption } from "./types";
 
@@ -99,23 +99,26 @@ export const estimatesModule: ModuleDefinition = {
     { name: "validUntil", label: "Valid until", type: "date", defaultValue: ({ settings }) => addDays(todayISO(), settings.app.estimateValidityDays) },
     { name: "status", label: "Status", type: "select", required: true, defaultValue: "draft", options: ESTIMATE_STATUS },
     { name: "items", label: "Items", type: "items", required: true },
-    { name: "discount", label: "Discount (₹, before GST)", type: "currency", min: 0 },
+    { name: "discount", label: "Discount (₹, before GST)", type: "currency", min: 0, help: "Taken off the one-time charges." },
     { name: "subtotal", label: "Subtotal", type: "currency", computed: true },
     { name: "taxTotal", label: "GST", type: "currency", computed: true },
-    { name: "total", label: "Total", type: "currency", computed: true },
+    { name: "total", label: "Amount", type: "currency", computed: true, display: "billingGroups" },
     { name: "notes", label: "Notes for the client", type: "textarea", wide: true },
     { name: "terms", label: "Terms", type: "textarea", wide: true, defaultValue: ({ settings }) => settings.app.estimateTerms },
   ],
   validate: (v) => (Array.isArray(v.items) && v.items.length ? null : "Add at least one item."),
   beforeSave: (data, { settings }) => {
-    const t = discountedTotals((data.items as LineItem[] | undefined) ?? [], data.discount);
+    const groups = groupedTotals((data.items as LineItem[] | undefined) ?? [], data.discount);
+    const sum = (k: "subtotal" | "discount" | "taxTotal" | "total") => Math.round(groups.reduce((t, g) => t + g[k], 0) * 100) / 100;
     return {
       ...data,
       estimateNumber: (data.estimateNumber as string)?.trim() || docNumber(settings.business.estimatePrefix),
-      subtotal: t.subtotal,
-      discount: t.discount || null,
-      taxTotal: t.taxTotal,
-      total: t.total,
+      // Sums across groups are kept for reports (pipeline value); the estimate itself shows each group on its own.
+      subtotal: sum("subtotal"),
+      discount: sum("discount") || null,
+      taxTotal: sum("taxTotal"),
+      total: sum("total"),
+      ...groupFields(groups),
     };
   },
   actions: [

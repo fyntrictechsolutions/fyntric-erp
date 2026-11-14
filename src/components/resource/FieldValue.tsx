@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import type { FieldDefinition } from "@/config/modules";
+import type { FieldDefinition, LineItem } from "@/config/modules";
+import { groupedTotals } from "@/lib/lineItems";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 
@@ -23,6 +24,21 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
     case "reference":
       return record[`${field.name}Label`] ? <>{String(record[`${field.name}Label`])}</> : empty;
     case "currency":
+      if (field.display === "billingGroups" && Array.isArray(record.items) && record.items.length) {
+        // One-time, yearly and monthly charges don't add up to one figure, so show each.
+        const groups = groupedTotals(record.items as LineItem[], record.discount);
+        if (groups.length > 1 || groups[0]?.key !== "once")
+          return (
+            <span className="block space-y-0.5 tabular-nums whitespace-nowrap">
+              {groups.map((g) => (
+                <span key={g.key} className="block">
+                  {formatCurrency(g.total)}
+                  {g.per && <span className="text-xs text-muted">{g.per}</span>}
+                </span>
+              ))}
+            </span>
+          );
+      }
       return value === undefined || value === null || value === "" ? empty : <span className="tabular-nums">{formatCurrency(value)}</span>;
     case "date":
       return value ? <span className="whitespace-nowrap">{formatDate(value)}</span> : empty;

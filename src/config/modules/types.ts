@@ -55,7 +55,7 @@ export interface FieldDefinition {
   /** Hidden from these roles in tables and forms. */
   hiddenFor?: Role[];
   /** How a number is shown in tables. */
-  display?: "progress";
+  display?: "progress" | "billingGroups";
   min?: number;
   max?: number;
   /** Takes the full row in the two-column form. */
@@ -73,7 +73,11 @@ export interface LineItem {
   taxRate: number;
   /** Before tax. */
   amount: number;
+  /** One-time charge, or billed every month or year. Missing on older lines: see billingOf(). */
+  billing?: Billing;
 }
+
+export type Billing = "once" | "annually" | "monthly";
 
 export interface FormContext {
   settings: Settings;
