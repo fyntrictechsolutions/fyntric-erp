@@ -19,6 +19,7 @@ import { useRecord } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { groupedTotals } from "@/lib/lineItems";
 import { updateRecord } from "@/lib/records";
 import type { BaseRecord } from "@/types";
 
@@ -35,14 +36,17 @@ function phoneForWhatsApp(phone: unknown) {
 }
 
 function summaryText(est: BaseRecord, lead: BaseRecord | null, businessName: string) {
-  const items = (est.items as LineItem[] | undefined) ?? [];
+  const groups = groupedTotals(est.items as LineItem[] | undefined, est.discount);
+  const several = groups.length > 1 || groups[0]?.key !== "once";
   const lines = [
     `Hello ${lead?.name ?? est.leadIdLabel ?? ""},`,
     "",
     `Here is our estimate ${est.estimateNumber ?? ""}${est.title ? ` for ${est.title}` : ""}:`,
-    ...items.map((i) => `• ${i.name}${i.qty > 1 ? ` × ${i.qty}` : ""}: ${formatCurrency(i.amount)}`),
-    "",
-    `Total: ${formatCurrency(est.total)} (including GST)`,
+    ...groups.flatMap((g) => [
+      ...(several ? ["", `${g.label}:`] : []),
+      ...g.items.map(({ item: i }) => `• ${i.name}${i.qty > 1 ? ` × ${i.qty}` : ""}: ${formatCurrency(i.amount)}`),
+      `${several ? `${g.short} total` : "Total"}: ${formatCurrency(g.total)}${g.per} (including GST)`,
+    ]),
     est.validUntil ? `Valid until: ${formatDate(est.validUntil)}` : "",
     "",
     "Please let us know if you'd like any changes.",
@@ -149,13 +153,8 @@ function EstimateDetail({ id }: { id: string }) {
 function EstimateSheet({ est, lead }: { est: BaseRecord; lead: BaseRecord | null }) {
   const settings = useSettings();
   const b = settings.business;
-  const items = (est.items as LineItem[] | undefined) ?? [];
-  const discount = Number(est.discount) || 0;
-  const rows: [string, unknown][] = [
-    ["Subtotal", est.subtotal],
-    ...(discount ? ([["Discount", -discount]] as [string, unknown][]) : []),
-    ["GST", est.taxTotal],
-  ];
+  const groups = groupedTotals(est.items as LineItem[] | undefined, est.discount);
+  const several = groups.length > 1 || groups[0]?.key !== "once";
 
   return (
     <article className="print-sheet mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-card sm:p-10">
@@ -193,50 +192,78 @@ function EstimateSheet({ est, lead }: { est: BaseRecord; lead: BaseRecord | null
         )}
       </section>
 
-      <div className="-mx-6 overflow-x-auto sm:mx-0">
-        <table className="w-full min-w-[560px] text-left text-sm">
-          <thead>
-            <tr className="border-y border-slate-200 bg-slate-50 text-xs tracking-wide text-slate-500 uppercase">
-              <th className="px-3 py-2 font-medium">#</th>
-              <th className="px-3 py-2 font-medium">Item</th>
-              <th className="px-3 py-2 text-right font-medium">Qty</th>
-              <th className="px-3 py-2 text-right font-medium">Rate</th>
-              <th className="px-3 py-2 text-right font-medium">GST</th>
-              <th className="px-3 py-2 text-right font-medium">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((it, i) => (
-              <tr key={i} className="align-top">
-                <td className="px-3 py-3 text-slate-500">{i + 1}</td>
-                <td className="px-3 py-3">
-                  <p className="font-medium text-slate-900">{it.name}</p>
-                  {it.description && <p className="mt-0.5 text-xs whitespace-pre-line text-slate-500">{it.description}</p>}
-                </td>
-                <td className="px-3 py-3 text-right tabular-nums">{it.qty}{it.unit ? ` ${it.unit}` : ""}</td>
-                <td className="px-3 py-3 text-right tabular-nums">{formatCurrency(it.rate)}</td>
-                <td className="px-3 py-3 text-right tabular-nums">{it.taxRate}%</td>
-                <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-900">{formatCurrency(it.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-4 flex justify-end">
-        <dl className="w-full max-w-xs space-y-1.5 text-sm">
-          {rows.map(([label, value]) => (
-            <div key={label} className="flex justify-between gap-4">
-              <dt className="text-slate-500">{label}</dt>
-              <dd className="tabular-nums">{formatCurrency(value)}</dd>
-            </div>
-          ))}
-          <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
-            <dt>Total</dt>
-            <dd className="tabular-nums">{formatCurrency(est.total)}</dd>
+      {groups.map((g) => (
+        <section key={g.key} className="mb-6 break-inside-avoid">
+          {several && <h2 className="mb-2 text-sm font-semibold tracking-wide text-slate-900 uppercase">{g.label}</h2>}
+          <div className="-mx-6 overflow-x-auto sm:mx-0">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr className="border-y border-slate-200 bg-slate-50 text-xs tracking-wide text-slate-500 uppercase">
+                  <th className="px-3 py-2 font-medium">#</th>
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 text-right font-medium">Qty</th>
+                  <th className="px-3 py-2 text-right font-medium">Rate</th>
+                  <th className="px-3 py-2 text-right font-medium">GST</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {g.items.map(({ item: it }, i) => (
+                  <tr key={i} className="align-top">
+                    <td className="px-3 py-3 text-slate-500">{i + 1}</td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-slate-900">{it.name}</p>
+                      {it.description && <p className="mt-0.5 text-xs whitespace-pre-line text-slate-500">{it.description}</p>}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums">{it.qty}{it.unit ? ` ${it.unit}` : ""}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatCurrency(it.rate)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{it.taxRate}%</td>
+                    <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-900">{formatCurrency(it.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </dl>
-      </div>
+          <div className="mt-3 flex justify-end">
+            <dl className="w-full max-w-xs space-y-1.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Subtotal</dt>
+                <dd className="tabular-nums">{formatCurrency(g.subtotal)}</dd>
+              </div>
+              {g.discount > 0 && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-500">Discount</dt>
+                  <dd className="tabular-nums">{formatCurrency(-g.discount)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">GST</dt>
+                <dd className="tabular-nums">{formatCurrency(g.taxTotal)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+                <dt>{several ? `${g.short} total` : "Total"}</dt>
+                <dd className="tabular-nums">{formatCurrency(g.total)}{g.per && <span className="text-sm font-normal text-slate-500">{g.per}</span>}</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+      ))}
+
+      {groups.length > 1 && (
+        <section className="mb-2 flex justify-end break-inside-avoid">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">Summary (including GST)</p>
+            <dl className="space-y-1.5 text-sm">
+              {groups.map((g) => (
+                <div key={g.key} className="flex justify-between gap-4">
+                  <dt className="text-slate-600">{g.short}</dt>
+                  <dd className="font-semibold whitespace-nowrap tabular-nums text-slate-900">{formatCurrency(g.total)}{g.per && <span className="font-normal text-slate-500">{g.per}</span>}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+      )}
 
       {(Boolean(est.notes) || Boolean(est.terms)) && (
         <section className="mt-8 grid gap-6 border-t border-slate-200 pt-6 sm:grid-cols-2">

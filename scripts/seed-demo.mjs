@@ -116,8 +116,8 @@ const line = (i, qty = 1) => {
 const estimates = [
   ["lead0", "Ravi Kumar", "Restaurant ERP", [line(2), line(3)], "sent", -6],
   ["lead1", "Aisha Khan", "Clinic booking app", [line(2), line(5, 12)], "revision", -4],
-  ["lead4", "Sanjay Gupta", "Gym membership app", [line(2), line(4, 12)], "approved", -9],
-  ["lead2", "Manoj Varghese", "Property listing site", [line(0), line(4, 12)], "draft", 0],
+  ["lead4", "Sanjay Gupta", "Gym membership app", [line(2), line(4)], "approved", -9],
+  ["lead2", "Manoj Varghese", "Property listing site", [line(0), line(3), line(4)], "draft", 0],
 ];
 for (const [i, [leadId, leadIdLabel, title, items, status, day]] of estimates.entries()) {
   const subtotal = items.reduce((t, it) => t + it.amount, 0);
