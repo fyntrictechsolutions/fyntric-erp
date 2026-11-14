@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { initializeApp as initAdmin } from "firebase-admin/app";
+import { getAuth as adminAuth } from "firebase-admin/auth";
 import { getFirestore as adminDb } from "firebase-admin/firestore";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
@@ -12,22 +13,24 @@ import {
 
 const PROJECT = "demo-fyntric";
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-const admin = adminDb(initAdmin({ projectId: PROJECT }, "admin"));
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
+const adminApp = initAdmin({ projectId: PROJECT }, "admin");
+const admin = adminDb(adminApp);
 
 const ROLES = ["admin", "project_manager", "hr_manager", "sales", "staff", "client", "investor", "viewer", "pending"];
 /** role -> { uid, db } */
 const users = {};
 const apps = [];
 
-async function signUp(role) {
-  const app = initializeApp({ apiKey: "demo", projectId: PROJECT }, `u-${role}`);
+async function signUp(role, email = `${role}-${Date.now()}@test.dev`) {
+  const app = initializeApp({ apiKey: "demo", projectId: PROJECT }, `u-${role}-${Math.random()}`);
   apps.push(app);
   const auth = getAuth(app);
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   const db = getFirestore(app);
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  const cred = await createUserWithEmailAndPassword(auth, `${role}-${Date.now()}@test.dev`, "secret123");
-  return { uid: cred.user.uid, db };
+  const cred = await createUserWithEmailAndPassword(auth, email, "secret123");
+  return { uid: cred.user.uid, db, auth, email };
 }
 
 const allowed = (p) => p.then(() => true, (e) => (String(e.code).includes("permission-denied") ? false : Promise.reject(e)));
@@ -48,6 +51,8 @@ before(async () => {
   await admin.doc("leave/l1").set({ status: "pending", userId: users.staff.uid, reason: "x" });
   await admin.doc("expenses/e1").set({ status: "pending", amount: 10, userId: users.staff.uid });
   await admin.doc("attendance/a1").set({ date: "2026-11-11", checkIn: "09:00", workMode: "office", userId: users.staff.uid });
+  await admin.doc("purchases/b1").set({ billNumber: "B1", total: 118, amount: 100, userId: users.admin.uid });
+  await admin.doc("estimates/est1").set({ leadId: "x", status: "draft", userId: users.sales.uid });
 });
 
 after(async () => {
@@ -72,6 +77,42 @@ describe("users", () => {
   test("only admin lists users", async () => {
     assert.equal(await allowed(getDocs(collection(users.admin.db, "users"))), true);
     assert.equal(await allowed(getDocs(collection(users.hr_manager.db, "users"))), false);
+  });
+});
+
+describe("invitations", () => {
+  async function verified(role, email) {
+    const u = await signUp(role, email);
+    await adminAuth(adminApp).updateUser(u.uid, { emailVerified: true });
+    await u.auth.currentUser.getIdToken(true);
+    return u;
+  }
+  test("only admin creates invitations", async () => {
+    assert.equal(await allowed(setDoc(doc(users.admin.db, "invites", "new@test.dev"), { email: "new@test.dev", role: "staff" })), true);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "invites", "x@test.dev"), { email: "x@test.dev", role: "admin" })), false);
+  });
+  test("invited person signs in with the invited role", async () => {
+    const email = `invitee-${Date.now()}@test.dev`;
+    await admin.doc(`invites/${email}`).set({ email, role: "sales", employeeId: "emp9", clientId: null });
+    const u = await verified("invitee", email);
+    assert.equal(await allowed(getDoc(doc(u.db, "invites", email))), true);
+    const profile = { email, displayName: "I", active: true, inviteId: email, employeeId: "emp9", clientId: null };
+    assert.equal(await allowed(setDoc(doc(u.db, "users", u.uid), { ...profile, role: "admin" })), false);
+    assert.equal(await allowed(setDoc(doc(u.db, "users", u.uid), { ...profile, role: "sales" })), true);
+    assert.equal(await allowed(deleteDoc(doc(u.db, "invites", email))), true);
+  });
+  test("someone else can't use or read an invitation", async () => {
+    const email = `target-${Date.now()}@test.dev`;
+    await admin.doc(`invites/${email}`).set({ email, role: "admin" });
+    const other = await verified("other", `other-${Date.now()}@test.dev`);
+    assert.equal(await allowed(getDoc(doc(other.db, "invites", email))), false);
+    assert.equal(await allowed(setDoc(doc(other.db, "users", other.uid), { role: "admin", active: true, inviteId: email })), false);
+  });
+  test("an unverified email can't claim its invitation", async () => {
+    const email = `unverified-${Date.now()}@test.dev`;
+    await admin.doc(`invites/${email}`).set({ email, role: "staff" });
+    const u = await signUp("unverified", email);
+    assert.equal(await allowed(setDoc(doc(u.db, "users", u.uid), { role: "staff", active: true, inviteId: email })), false);
   });
 });
 
@@ -114,9 +155,22 @@ describe("leave approvals", () => {
 });
 
 describe("attendance", () => {
-  test("staff can check out but not move check-in", async () => {
-    assert.equal(await allowed(updateDoc(doc(users.staff.db, "attendance", "a1"), { checkOut: "18:00" })), true);
+  test("staff can check out once but not move check-in", async () => {
     assert.equal(await allowed(updateDoc(doc(users.staff.db, "attendance", "a1"), { checkIn: "08:00" })), false);
+    assert.equal(await allowed(updateDoc(doc(users.staff.db, "attendance", "a1"), { checkOut: "18:00", hours: 9 })), true);
+    assert.equal(await allowed(updateDoc(doc(users.staff.db, "attendance", "a1"), { checkOut: "20:00" })), false);
+  });
+  test("admin and PM correct entries; HR can only look", async () => {
+    assert.equal(await allowed(updateDoc(doc(users.project_manager.db, "attendance", "a1"), { checkIn: "08:30" })), true);
+    assert.equal(await allowed(updateDoc(doc(users.admin.db, "attendance", "a1"), { checkIn: "08:45" })), true);
+    assert.equal(await allowed(updateDoc(doc(users.hr_manager.db, "attendance", "a1"), { checkIn: "08:00" })), false);
+    for (const r of ["hr_manager", "project_manager", "investor", "viewer"]) {
+      assert.equal(await allowed(getDocs(collection(users[r].db, "attendance"))), true, r);
+    }
+    assert.equal(await allowed(getDocs(collection(users.sales.db, "attendance"))), false);
+  });
+  test("staff cannot delete attendance", async () => {
+    assert.equal(await allowed(deleteDoc(doc(users.staff.db, "attendance", "a1"))), false);
   });
   test("clients and investors have no attendance", async () => {
     const c = users.client;
@@ -153,11 +207,46 @@ describe("module access by role", () => {
     }
     for (const r of ["staff", "client", "investor", "hr_manager"]) assert.equal(await allowed(getDocs(collection(users[r].db, "leads"))), false, r);
   });
-  test("employees: HR writes, staff reads, investor/viewer/client nothing", async () => {
-    assert.equal(await allowed(addDoc(collection(users.hr_manager.db, "employees"), { fullName: "A", userId: users.hr_manager.uid })), true);
-    assert.equal(await allowed(addDoc(collection(users.staff.db, "employees"), { fullName: "A", userId: users.staff.uid })), false);
-    assert.equal(await allowed(getDocs(collection(users.staff.db, "employees"))), true);
-    for (const r of ["investor", "viewer", "client"]) assert.equal(await allowed(getDocs(collection(users[r].db, "employees"))), false, r);
+  test("employees: admin writes; HR, PM, investor, viewer read; others nothing", async () => {
+    assert.equal(await allowed(addDoc(collection(users.admin.db, "employees"), { fullName: "A", userId: users.admin.uid })), true);
+    assert.equal(await allowed(addDoc(collection(users.hr_manager.db, "employees"), { fullName: "A", userId: users.hr_manager.uid })), false);
+    for (const r of ["hr_manager", "project_manager", "investor", "viewer"]) assert.equal(await allowed(getDocs(collection(users[r].db, "employees"))), true, r);
+    for (const r of ["staff", "sales", "client"]) assert.equal(await allowed(getDocs(collection(users[r].db, "employees"))), false, r);
+  });
+  test("follow-ups and estimates: sales writes; PM and viewer read", async () => {
+    assert.equal(await allowed(addDoc(collection(users.sales.db, "followups"), { leadId: "x", userId: users.sales.uid })), true);
+    assert.equal(await allowed(updateDoc(doc(users.sales.db, "estimates", "est1"), { status: "sent" })), true);
+    for (const r of ["project_manager", "viewer"]) {
+      assert.equal(await allowed(getDocs(collection(users[r].db, "followups"))), true, r);
+      assert.equal(await allowed(updateDoc(doc(users[r].db, "estimates", "est1"), { status: "approved" })), false, r);
+    }
+    assert.equal(await allowed(getDocs(collection(users.investor.db, "estimates"))), true);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "estimates"))), false);
+  });
+  test("products: everyone internal reads, sales writes", async () => {
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "products"))), true);
+    assert.equal(await allowed(addDoc(collection(users.sales.db, "products"), { name: "Site", userId: users.sales.uid })), true);
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "products"), { name: "Site", userId: users.staff.uid })), false);
+    assert.equal(await allowed(getDocs(collection(users.client.db, "products"))), false);
+  });
+  test("purchases and suppliers: admin only writes; investor reads; sales nothing", async () => {
+    assert.equal(await allowed(addDoc(collection(users.admin.db, "suppliers"), { name: "S", userId: users.admin.uid })), true);
+    assert.equal(await allowed(getDocs(collection(users.investor.db, "purchases"))), true);
+    assert.equal(await allowed(updateDoc(doc(users.investor.db, "purchases", "b1"), { total: 1 })), false);
+    assert.equal(await allowed(getDocs(collection(users.sales.db, "purchases"))), false);
+  });
+  test("payments: sales records money received only; admin records both", async () => {
+    const s = users.sales;
+    assert.equal(await allowed(addDoc(collection(s.db, "payments"), { direction: "received", invoiceId: "i1", amount: 50, userId: s.uid })), true);
+    assert.equal(await allowed(addDoc(collection(s.db, "payments"), { direction: "paid", billId: "b1", amount: 50, userId: s.uid })), false);
+    assert.equal(await allowed(addDoc(collection(users.admin.db, "payments"), { direction: "paid", billId: "b1", amount: 50, userId: users.admin.uid })), true);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "payments"))), false);
+  });
+  test("settings: everyone signed in reads, only admin writes", async () => {
+    assert.equal(await allowed(setDoc(doc(users.admin.db, "settings", "business"), { name: "Fyntric" }, { merge: true })), true);
+    assert.equal(await allowed(getDoc(doc(users.client.db, "settings", "business"))), true);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "settings", "business"), { name: "X" }, { merge: true })), false);
+    assert.equal(await allowed(getDoc(doc(users.pending.db, "settings", "business"))), false);
   });
   test("projects: PM writes, staff/investor/viewer read only", async () => {
     assert.equal(await allowed(updateDoc(doc(users.project_manager.db, "projects", "p1"), { progress: 50 })), true);

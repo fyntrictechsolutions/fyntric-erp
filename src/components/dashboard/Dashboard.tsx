@@ -24,7 +24,9 @@ export function Dashboard() {
 
   const employees = useModuleRecords("employees", profile);
   const attendance = useModuleRecords("attendance", profile);
-  const leave = useModuleRecords("leave", profile);
+  // Only HR and admins review leave; everyone else sees their own requests here.
+  const reviewsLeave = ["admin", "hr_manager"].includes(profile.role);
+  const leave = useModuleRecords("leave", profile, !reviewsLeave);
   const leads = useModuleRecords("leads", profile);
   const projects = useModuleRecords("projects", profile);
   const timesheets = useModuleRecords("timesheets", profile);
@@ -34,7 +36,7 @@ export function Dashboard() {
   const stats = useMemo(() => {
     const activeProjects = projects.data.filter((p) => p.status === "in_progress" || p.status === "planning");
     const openLeads = leads.data.filter((l) => l.stage !== "won" && l.stage !== "lost");
-    const outstanding = invoices.data.filter((i) => i.status === "sent" || i.status === "overdue");
+    const outstanding = invoices.data.filter((i) => i.status === "sent" || i.status === "overdue" || i.status === "partial");
     const paidThisMonth = invoices.data.filter((i) => i.status === "paid" && monthOf(i.paidDate ?? i.issueDate) === thisMonth);
     return {
       activeProjects,
@@ -50,7 +52,7 @@ export function Dashboard() {
   }, [projects.data, leads.data, invoices.data, employees.data, attendance.data, leave.data, timesheets.data, expenses.data, thisMonth, today]);
 
   const greeting = greet();
-  const leaveIsMine = leave.allowed && !["admin", "hr_manager"].includes(profile.role);
+  const leaveIsMine = leave.allowed && !reviewsLeave;
 
   return (
     <div className="animate-fade-up">
@@ -67,7 +69,7 @@ export function Dashboard() {
           <StatCard label="Open leads" value={String(stats.openLeads.length)} hint={`${formatCurrency(sum(stats.openLeads, "estimatedValue"), true)} in pipeline`} icon={Target} accent="violet" href="/crm/leads" loading={leads.loading} />
         )}
         {invoices.allowed && (
-          <StatCard label="Outstanding invoices" value={formatCurrency(sum(stats.outstanding, "total"), true)} hint={`${stats.outstanding.length} awaiting payment`} icon={FileText} accent="amber" href="/finance/invoices" loading={invoices.loading} />
+          <StatCard label="Outstanding invoices" value={formatCurrency(stats.outstanding.reduce((t, i) => t + (Number(i.balance ?? i.total) || 0), 0), true)} hint={`${stats.outstanding.length} awaiting payment`} icon={FileText} accent="amber" href="/finance/invoices" loading={invoices.loading} />
         )}
         {invoices.allowed && profile.role !== "client" && (
           <StatCard label="Collected this month" value={formatCurrency(sum(stats.paidThisMonth, "total"), true)} hint={`${stats.paidThisMonth.length} ${stats.paidThisMonth.length === 1 ? "invoice" : "invoices"} paid`} icon={FileText} accent="green" href="/finance/invoices" loading={invoices.loading} />

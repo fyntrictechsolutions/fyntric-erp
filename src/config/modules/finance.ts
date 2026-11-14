@@ -127,7 +127,7 @@ export const paymentsModule: ModuleDefinition = {
   searchFields: ["against", "reference", "mode", "notes"],
   columns: ["date", "direction", "against", "amount", "mode", "reference"],
   fields: [
-    { name: "direction", label: "Type", type: "select", required: true, defaultValue: "received", options: PAYMENT_DIRECTION, lockedAfterCreate: true },
+    { name: "direction", label: "Type", type: "select", required: true, defaultValue: "received", options: PAYMENT_DIRECTION, lockedAfterCreate: true, hiddenFor: ["sales"] },
     {
       name: "invoiceId",
       label: "Invoice",
