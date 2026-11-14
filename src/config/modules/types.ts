@@ -128,6 +128,8 @@ export interface ModuleDefinition {
   managersEditOnly?: boolean;
   /** Clicking a row opens this page. */
   detailHref?: (id: string) => string;
+  /** Checks the form before saving; return a message to stop the save. */
+  validate?: (values: Record<string, unknown>) => string | null;
   /** Fill in computed fields before saving. */
   beforeSave?: (data: Record<string, unknown>, ctx: FormContext) => Record<string, unknown>;
   /** Runs after a new record is saved (e.g. schedule a lead's first call). */

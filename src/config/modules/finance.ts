@@ -1,8 +1,13 @@
 import { Check, FileText, HandCoins, Receipt, Wallet, X } from "lucide-react";
 import { todayISO } from "@/lib/format";
 import { recalcPaid } from "@/lib/payments";
+import { discountedTotals } from "@/lib/lineItems";
 import { docNumber } from "./options";
-import type { ModuleDefinition, SelectOption } from "./types";
+import type { LineItem, ModuleDefinition, SelectOption } from "./types";
+
+const hasItems = (v: Record<string, unknown>) => Array.isArray(v.items) && v.items.length > 0;
+/** An invoice from before line items: it has an amount but no items. */
+const isLegacy = (v: Record<string, unknown>) => !hasItems(v) && v.amount !== undefined && v.amount !== null && v.amount !== "";
 
 export const invoicesModule: ModuleDefinition = {
   key: "invoices",
@@ -20,8 +25,12 @@ export const invoicesModule: ModuleDefinition = {
     { name: "projectId", label: "Project", type: "reference", reference: { module: "projects", labelField: "name" } },
     { name: "issueDate", label: "Issue date", type: "date", required: true, defaultValue: todayISO },
     { name: "dueDate", label: "Due date", type: "date" },
-    { name: "amount", label: "Amount (before tax)", type: "currency", required: true, min: 0 },
-    { name: "taxRate", label: "GST (%)", type: "percent", defaultValue: 18, min: 0, max: 100 },
+    { name: "items", label: "Items", type: "items", wide: true },
+    { name: "discount", label: "Discount (₹, before GST)", type: "currency", min: 0, showWhen: hasItems },
+    // Invoices made before line items existed keep a single amount and GST rate.
+    { name: "amount", label: "Amount (before GST)", type: "currency", min: 0, showWhen: isLegacy },
+    { name: "taxRate", label: "GST (%)", type: "percent", min: 0, max: 100, showWhen: isLegacy },
+    { name: "taxTotal", label: "GST", type: "currency", computed: true },
     { name: "total", label: "Total", type: "currency", computed: true },
     { name: "amountPaid", label: "Paid", type: "currency", computed: true },
     { name: "balance", label: "Balance due", type: "currency", computed: true },
@@ -40,16 +49,36 @@ export const invoicesModule: ModuleDefinition = {
       ],
     },
     { name: "paidDate", label: "Paid on", type: "date" },
-    { name: "notes", label: "Line items / notes", type: "textarea", wide: true },
+    { name: "notes", label: "Notes", type: "textarea", wide: true },
   ],
+  validate: (v) => (hasItems(v) || isLegacy(v) ? null : "Add at least one item."),
   beforeSave: (data, { settings }) => {
-    const amount = Number(data.amount) || 0;
-    const tax = Number(data.taxRate) || 0;
-    const total = Math.round(amount * (1 + tax / 100) * 100) / 100;
+    const items = (data.items as LineItem[] | undefined) ?? [];
+    let amount: number;
+    let taxTotal: number;
+    let total: number;
+    let discount: number | null = null;
+    if (items.length) {
+      const t = discountedTotals(items, data.discount);
+      amount = t.taxable;
+      taxTotal = t.taxTotal;
+      total = t.total;
+      discount = t.discount || null;
+    } else {
+      amount = Number(data.amount) || 0;
+      total = Math.round(amount * (1 + (Number(data.taxRate) || 0) / 100) * 100) / 100;
+      taxTotal = Math.round((total - amount) * 100) / 100;
+    }
     const paid = Number(data.amountPaid) || 0;
     return {
       ...data,
       invoiceNumber: (data.invoiceNumber as string)?.trim() || docNumber(settings.business.invoicePrefix),
+      items,
+      discount,
+      // "amount" is always the taxable value before GST (reports rely on it).
+      amount,
+      taxRate: items.length ? null : data.taxRate,
+      taxTotal,
       total,
       amountPaid: paid,
       balance: Math.round((total - paid) * 100) / 100,

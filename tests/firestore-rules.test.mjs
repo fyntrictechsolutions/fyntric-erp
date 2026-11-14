@@ -80,6 +80,34 @@ describe("users", () => {
   });
 });
 
+describe("hiring, salaries and exits", () => {
+  test("HR and admin manage candidates; others can't see them", async () => {
+    const hr = users.hr_manager;
+    const ref = await addDoc(collection(hr.db, "candidates"), { fullName: "C", email: "c@test.dev", userId: hr.uid });
+    assert.equal(await allowed(updateDoc(doc(hr.db, "candidates", ref.id), { stage: "interviewing", "interviews.phase1": { status: "passed" } })), true);
+    for (const r of ["project_manager", "staff", "investor", "viewer"]) assert.equal(await allowed(getDocs(collection(users[r].db, "candidates"))), false, r);
+  });
+  test("salaries and exits: HR and admin only", async () => {
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "salaries", "emp1"), { current: { total: 50000 } })), true);
+    assert.equal(await allowed(getDoc(doc(users.admin.db, "salaries", "emp1"))), true);
+    for (const r of ["staff", "project_manager", "investor", "viewer"]) assert.equal(await allowed(getDoc(doc(users[r].db, "salaries", "emp1"))), false, r);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "exits", "emp1"), { status: "requested" })), true);
+    assert.equal(await allowed(setDoc(doc(users.staff.db, "exits", "emp1"), { status: "withdrawn" })), false);
+  });
+  test("files: HR uploads; others can't read", async () => {
+    const hr = users.hr_manager;
+    assert.equal(await allowed(addDoc(collection(hr.db, "files"), { ownerId: "x", data: "data:,hi", userId: hr.uid })), true);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "files"))), false);
+  });
+  test("HR can invite a hire only as Other Staff, and create their employee record but not edit it", async () => {
+    const hr = users.hr_manager;
+    assert.equal(await allowed(setDoc(doc(hr.db, "invites", "hire@test.dev"), { email: "hire@test.dev", role: "staff" })), true);
+    assert.equal(await allowed(setDoc(doc(hr.db, "invites", "boss@test.dev"), { email: "boss@test.dev", role: "admin" })), false);
+    const emp = await addDoc(collection(hr.db, "employees"), { fullName: "Hire", userId: hr.uid });
+    assert.equal(await allowed(updateDoc(doc(hr.db, "employees", emp.id), { designation: "CEO" })), false);
+  });
+});
+
 describe("invitations", () => {
   async function verified(role, email) {
     const u = await signUp(role, email);
@@ -207,9 +235,9 @@ describe("module access by role", () => {
     }
     for (const r of ["staff", "client", "investor", "hr_manager"]) assert.equal(await allowed(getDocs(collection(users[r].db, "leads"))), false, r);
   });
-  test("employees: admin writes; HR, PM, investor, viewer read; others nothing", async () => {
+  test("employees: admin writes; HR, PM, investor, viewer read; staff can't create", async () => {
     assert.equal(await allowed(addDoc(collection(users.admin.db, "employees"), { fullName: "A", userId: users.admin.uid })), true);
-    assert.equal(await allowed(addDoc(collection(users.hr_manager.db, "employees"), { fullName: "A", userId: users.hr_manager.uid })), false);
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "employees"), { fullName: "A", userId: users.staff.uid })), false);
     for (const r of ["hr_manager", "project_manager", "investor", "viewer"]) assert.equal(await allowed(getDocs(collection(users[r].db, "employees"))), true, r);
     for (const r of ["staff", "sales", "client"]) assert.equal(await allowed(getDocs(collection(users[r].db, "employees"))), false, r);
   });

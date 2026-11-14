@@ -147,7 +147,8 @@ const invoices = [
 for (const [i, [clientId, clientIdLabel, amount, status, issued, paid]] of invoices.entries()) {
   const total = amount * 1.18;
   const amountPaid = status === "paid" ? total : 0;
-  await db.doc(`invoices/inv${i}`).set(stamp("sales", { invoiceNumber: `INV-2026-${1001 + i}`, clientId, clientIdLabel, amount, taxRate: 18, total, amountPaid, balance: total - amountPaid, status, issueDate: iso(issued), dueDate: iso(issued + 15), paidDate: paid === null ? null : iso(paid) }));
+  const items = [{ name: i % 2 ? "Development milestone" : "Website development", qty: 1, unit: "Project", rate: amount, taxRate: 18, amount }];
+  await db.doc(`invoices/inv${i}`).set(stamp("sales", { invoiceNumber: `INV-2026-${1001 + i}`, clientId, clientIdLabel, items, amount, taxTotal: total - amount, total, amountPaid, balance: total - amountPaid, status, issueDate: iso(issued), dueDate: iso(issued + 15), paidDate: paid === null ? null : iso(paid) }));
   if (status === "paid") {
     await db.doc(`payments/pay${i}`).set(stamp("sales", { direction: "received", invoiceId: `inv${i}`, invoiceIdLabel: `INV-2026-${1001 + i}`, against: `Invoice INV-2026-${1001 + i}`, date: iso(paid), amount: total, mode: "Bank transfer", reference: `UTR${88000 + i}` }));
   }
@@ -184,7 +185,8 @@ for (const [r, role] of ["staff", "project_manager", "sales", "hr_manager"].entr
     const date = d.toISOString().slice(0, 10);
     if ((back + r) % 17 === 5) continue; // missed day
     if (back === 0) {
-      await db.doc(`attendance/${role}-${date}`).set(stamp(role, { date, checkIn: "09:12", workMode: "office" }));
+      if (role === "hr_manager") continue; // not in yet today
+      await db.doc(`attendance/${role}-${date}`).set(stamp(role, { date, checkIn: role === "sales" ? "10:05" : "09:12", workMode: "office" }));
       continue;
     }
     const short = (back + r) % 9 === 3;
@@ -211,6 +213,43 @@ for (let m = 1; m <= 4; m++) {
   const date = d.toISOString().slice(0, 10);
   await db.doc(`expenses/sal${m}`).set(stamp("admin", { date, category: "Salaries", amount: 385000, paymentMode: "Bank transfer", description: `Salaries for ${d.toLocaleString("en-IN", { month: "long" })}`, status: "reimbursed" }));
 }
+
+// Hiring
+const candidates = [
+  ["cand0", "Nikhil Raj", "nikhil.raj@example.com", "Flutter Developer", "Engineering", 3, 720000, "interviewing", "LinkedIn"],
+  ["cand1", "Ameena Siddiq", "ameena.s@example.com", "UI/UX Designer", "Design", 2, 540000, "offered", "Referral"],
+  ["cand2", "Gokul Krishna", "gokul.k@example.com", "QA Engineer", "Quality Assurance", 1, 360000, "applied", "Naukri"],
+];
+for (const [id, fullName, email, designation, department, experienceYears, expectedCtc, stage, source] of candidates) {
+  const interviews = stage === "applied" ? {} : {
+    phase1: { interviewerId: "emp0", interviewerIdLabel: "Anjali Menon", date: iso(-6), time: "11:00", mode: "online", meetingLink: "https://meet.google.com/abc-defg-hij", status: "passed", feedback: "Strong basics, good communication." },
+    phase2: { interviewerId: "emp3", interviewerIdLabel: "Arjun Das", date: iso(2), time: "15:00", mode: "in_person", status: "pending" },
+  };
+  await db.doc(`candidates/${id}`).set(stamp("hr_manager", {
+    fullName, email, phone: "9847012345", designation, department, experienceYears, expectedCtc, currentCtc: expectedCtc * 0.8, stage, source,
+    appliedDate: iso(-12), city: "Kozhikode", education: "B.Tech Computer Science, NIT Calicut, 2022", experience: `${experienceYears} years at a Kochi software company.`,
+    candidateNote: "Can join in 30 days.", staffRemarks: "Shortlisted by Anjali.", interviews,
+  }));
+}
+
+// Salaries (monthly components) for the team, one with a past revision.
+const salaries = [
+  ["emp0", [["Basic", 40000], ["HRA", 16000], ["Special allowance", 14000]]],
+  ["emp1", [["Basic", 30000], ["HRA", 12000], ["Special allowance", 8000]]],
+  ["emp2", [["Basic", 22000], ["HRA", 8800], ["Special allowance", 6200], ["Performance bonus", 5000]]],
+  ["emp3", [["Basic", 35000], ["HRA", 14000], ["Special allowance", 11000]]],
+];
+for (const [emp, parts] of salaries) {
+  const components = parts.map(([name, amount]) => ({ name, amount }));
+  const total = components.reduce((t, c) => t + c.amount, 0);
+  const history = emp === "emp3"
+    ? [{ components: components.map((c) => ({ ...c, amount: Math.round(c.amount * 0.85) })), total: Math.round(total * 0.85), effectiveFrom: iso(-280), endedOn: iso(-61), notes: "Joining salary", savedBy: "Midhun Admin", savedAt: now }]
+    : [];
+  await db.doc(`salaries/${emp}`).set({ employeeId: emp, current: { components, total, effectiveFrom: emp === "emp3" ? iso(-60) : iso(-200), notes: emp === "emp3" ? "Appraisal" : "", savedBy: "Rahul Nair", savedAt: now }, history, updatedAt: now });
+}
+
+// One resignation in progress.
+await db.doc("exits/emp5").set({ employeeId: "emp5", employeeName: "Kiran Thomas", status: "requested", receivedOn: iso(-3), requestedLastDay: iso(27), reason: "Moving to Bengaluru for family reasons.", userId: uid.hr_manager, userName: "Rahul Nair", createdAt: now, updatedAt: now });
 
 console.log("Demo data ready. Sign in with e.g. admin@fyntric.test / fyntric123");
 process.exit(0);

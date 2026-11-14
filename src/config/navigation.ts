@@ -26,11 +26,12 @@ function moduleItem(key: ModuleKey, extra: Partial<NavItem> = {}): NavItem {
 export const NAVIGATION: NavSection[] = [
   { items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }] },
   {
-    title: "People",
+    title: "HR",
     items: [
       moduleItem("employees"),
       moduleItem("attendance", { roles: INTERNAL_ROLES }),
       moduleItem("leave", { roles: INTERNAL_ROLES }),
+      moduleItem("candidates"),
     ],
   },
   { title: "Sales", items: [moduleItem("leads"), moduleItem("estimates"), moduleItem("clients"), moduleItem("products")] },

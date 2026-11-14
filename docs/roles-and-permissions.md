@@ -19,6 +19,9 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 | Attendance (team view) | Full | View & correct | View | – | – | – | View | View |
 | My Attendance (check in/out) | Own | Own | Own | Own | Own | – | – | – |
 | Leave | Full (approves) | View all, edit own | Full (approves) | Own | Own | – | View | View |
+| Hiring (candidates) | Full | – | Full | – | – | – | – | – |
+| Salary structure | Full | – | Full | – | – | – | – | – |
+| Resignations | Full | – | Full | – | – | – | – | – |
 | Leads and follow-ups | Full | View | – | Full | – | – | – | View |
 | Estimates | Full | View | – | Full | – | – | View | View |
 | Clients | Full | View | – | Full | – | – | View | View |
@@ -36,6 +39,8 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 
 - New sign-ups are **pending** and see nothing until an admin gives them a role. Nobody can set their own role.
 - **Invitations** (`invites/{email}`) let an admin set the role in advance. The person gets it on first sign-in only if their email is verified (Google sign-in) and matches; the rules check the role, client and employee link against the invitation.
+- **HR Manager** can create employee records (not edit them) and invitations only for the Other Staff role with no client link, so a hired candidate can be converted into a team member.
+- **Files** (certificates, signed offers) are stored in the `files` collection as data (under 1 MB each) because Firebase Storage needs the paid plan. Only Admin and HR can read or delete them.
 - Giving someone a team role (Project Manager, HR, Sales, Other Staff) creates their **employee record** automatically; only admins edit employee records.
 - Admins can't change their own role or disable themselves, so the company always keeps an admin.
 - Staff can edit or withdraw their own leave and expense claims **only while pending**, and can never approve them.

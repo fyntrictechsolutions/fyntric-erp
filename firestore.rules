@@ -98,6 +98,12 @@ service cloud.firestore {
     // Invitations, keyed by email in lower case. The invited person can read and clear their own.
     match /invites/{id} {
       allow read, write: if role() == 'admin';
+      // HR can invite a hired candidate, only as Other Staff.
+      allow get: if role() == 'hr_manager';
+      allow create, update: if role() == 'hr_manager'
+        && request.resource.data.role == 'staff'
+        && request.resource.data.get('clientId', null) == null
+        && (resource == null || resource.data.role == 'staff');
       allow get, delete: if signedIn() && request.auth.token.email_verified == true
         && request.auth.token.email.lower() == id;
     }
@@ -112,7 +118,8 @@ service cloud.firestore {
 
     match /employees/{id} {
       allow read: if hasRole(['admin', 'hr_manager', 'project_manager', 'investor', 'viewer']);
-      allow create: if role() == 'admin' && createsOwn();
+      // HR creates the record when a candidate joins; only admins edit it afterwards.
+      allow create: if hasRole(['admin', 'hr_manager']) && createsOwn();
       allow update: if role() == 'admin' && keepsOwner();
       allow delete: if role() == 'admin';
     }
@@ -144,6 +151,31 @@ service cloud.firestore {
       );
       allow delete: if hasRole(['admin', 'hr_manager'])
         || (internal() && isOwner() && resource.data.status == 'pending');
+    }
+
+    // Hiring, salaries and exits: HR's own records.
+
+    match /candidates/{id} {
+      allow read: if hasRole(['admin', 'hr_manager']);
+      allow create: if hasRole(['admin', 'hr_manager']) && createsOwn();
+      allow update: if hasRole(['admin', 'hr_manager']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'hr_manager']);
+    }
+
+    // One document per employee: current structure plus history.
+    match /salaries/{employeeId} {
+      allow read, write: if hasRole(['admin', 'hr_manager']);
+    }
+
+    match /exits/{employeeId} {
+      allow read, write: if hasRole(['admin', 'hr_manager']);
+    }
+
+    // Small attachments (certificates, signed letters) kept in Firestore; HR documents only for now.
+    match /files/{id} {
+      allow read, delete: if hasRole(['admin', 'hr_manager']);
+      allow create: if hasRole(['admin', 'hr_manager']) && createsOwn()
+        && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
     }
 
     // Sales

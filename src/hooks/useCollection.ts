@@ -58,7 +58,7 @@ export function useModuleRecords<T extends BaseRecord = BaseRecord>(module: Modu
 }
 
 /** Live records of a module matching one field (e.g. follow-ups of a lead). Caller must have read access to all. */
-export function useRecordsWhere<T extends BaseRecord = BaseRecord>(module: ModuleKey, field: string, value: string | undefined | null) {
+export function useRecordsWhere<T extends BaseRecord = BaseRecord>(module: ModuleKey | "files" | "users", field: string, value: string | undefined | null) {
   return useLiveQuery<T>(
     () => (value ? query(collection(db(), module), where(field, "==", value)) : null),
     `${module}:${field}:${value ?? ""}`,
@@ -66,7 +66,7 @@ export function useRecordsWhere<T extends BaseRecord = BaseRecord>(module: Modul
 }
 
 /** One live record by id. */
-export function useRecord<T extends BaseRecord = BaseRecord>(module: ModuleKey | "users", id: string | null | undefined) {
+export function useRecord<T extends BaseRecord = BaseRecord>(module: ModuleKey | "users" | "files", id: string | null | undefined) {
   const [state, setState] = useState<{ id: string; data: T | null; error: string | null } | null>(null);
   useEffect(() => {
     if (!id) return;

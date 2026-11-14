@@ -37,7 +37,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: "Runs the company account: everything, including users, settings, purchases and payments.",
   project_manager: "Owns projects and timesheets, edits attendance, and can see sales and finance for delivery.",
-  hr_manager: "Approves leave and sees the team's employee records and attendance.",
+  hr_manager: "Runs hiring, salaries, resignations and leave approvals, and sees the team's employee records and attendance.",
   sales: "Works leads, follow-ups, estimates, clients and invoices, and records payments received.",
   staff: "Checks in, applies for leave, logs timesheets and claims expenses.",
   client: "Sees only their own company's projects and invoices.",
@@ -55,6 +55,9 @@ export type ModuleKey =
   | "employees"
   | "attendance"
   | "leave"
+  | "candidates"
+  | "salaries"
+  | "exits"
   | "leads"
   | "followups"
   | "estimates"
@@ -133,6 +136,10 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
     investor: READ_ALL,
     viewer: READ_ALL,
   }),
+  // Hiring, pay and exits are HR's own work: Admin and HR Manager only.
+  candidates: row({ hr_manager: FULL }),
+  salaries: row({ hr_manager: FULL }),
+  exits: row({ hr_manager: FULL }),
 
   // Sales
   leads: row({ sales: FULL, project_manager: READ_ALL, viewer: READ_ALL }),
@@ -171,6 +178,9 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   employees: "Employees",
   attendance: "Attendance",
   leave: "Leave",
+  candidates: "Hiring (candidates)",
+  salaries: "Salary structure",
+  exits: "Resignations",
   leads: "Leads",
   followups: "Lead follow-ups",
   estimates: "Estimates",

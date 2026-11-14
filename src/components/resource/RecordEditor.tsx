@@ -40,6 +40,11 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
   const formId = `form-${module.key}`;
 
   const save = async () => {
+    const problem = module.validate?.(values);
+    if (problem) {
+      setMessage(problem);
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {

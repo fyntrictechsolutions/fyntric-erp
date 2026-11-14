@@ -4,7 +4,7 @@ Internal ERP for **Fyntric Tech IT Solutions**: people, sales, delivery and fina
 
 | Area | What's in it |
 | --- | --- |
-| **People** | Employee directory, daily check-in / check-out, leave requests with HR approval |
+| **HR** | Employee directory with a daily "Today" summary, check-in / check-out, monthly attendance reports, leave with HR approval, salary structures with revision history, hiring (candidates, interview phases, offer letters, convert to team member) and resignations |
 | **Sales** | Leads pipeline (with one-click "convert to client"), client companies |
 | **Delivery** | Projects with client, manager, deadline and progress; timesheets |
 | **Finance** | GST invoices with paid / outstanding tracking, expenses with approval and reimbursement |
@@ -119,4 +119,4 @@ npm run test:rules   # starts the emulators and runs the permission tests
 ## Free tier limits worth knowing
 
 Firestore Spark allows 50,000 reads, 20,000 writes and 1 GiB storage per day/total, which is plenty for a team of this size. Lists load each module's records live, so if a collection grows into many thousands of records, add pagination before it starts eating into the read quota.
-File uploads (receipts, documents) aren't included because Firebase Storage now needs the paid Blaze plan; it can be added later.
+Firebase Storage needs the paid Blaze plan, so the few uploads the app has (candidate certificates, signed offer letters) are stored as data in the `files` collection, up to 0.7 MB each.

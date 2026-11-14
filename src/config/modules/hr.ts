@@ -46,6 +46,7 @@ export const employeesModule: ModuleDefinition = {
         { value: "exited", label: "Exited", tone: "neutral" },
       ],
     },
+    { name: "exitDate", label: "Exit date", type: "date", showWhen: (v) => v.status === "exited" || v.status === "notice" },
     { name: "dateOfBirth", label: "Date of birth", type: "date" },
     { name: "bloodGroup", label: "Blood group", type: "text" },
     { name: "emergencyContact", label: "Emergency contact", type: "text" },
