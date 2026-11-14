@@ -129,7 +129,10 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
   const attAccess = moduleAccess(attendanceModule, profile);
   const workHours = settings.app.workHours;
 
-  const startDate = (employee.joiningDate as string) || undefined;
+  // Count from the later of joining and the first check-in, so days before the ERP was in use don't show as missed.
+  const firstCheckIn = attendance.data.reduce<string | undefined>((min, a) => (typeof a.date === "string" && (!min || a.date < min) ? a.date : min), undefined);
+  const joined = (employee.joiningDate as string) || undefined;
+  const startDate = [joined, firstCheckIn ?? today].filter(Boolean).sort().pop();
   const dayOf = useMemo(
     () => buildDayMap({ attendance: attendance.data, leave: leave.data, holidays: settings.lists.holidays, workHours, today, startDate }),
     [attendance.data, leave.data, settings.lists.holidays, workHours, today, startDate],
@@ -154,7 +157,7 @@ function AttendanceTab({ employee }: { employee: BaseRecord }) {
     return { month: count(monthStart, today), year: count(yearStart, yearEnd), leaveMonth, leaveYear, pending };
   }, [dayOf, today, year, thisYear, leave.data]);
 
-  const firstYear = Math.min(thisYear, Number((startDate ?? today).slice(0, 4)) || thisYear);
+  const firstYear = Math.min(thisYear, Number((joined ?? startDate ?? today).slice(0, 4)) || thisYear);
   const yearLeave = leave.data
     .filter((l) => String(l.fromDate ?? "").startsWith(String(year)) || String(l.toDate ?? "").startsWith(String(year)))
     .sort((a, b) => String(b.fromDate).localeCompare(String(a.fromDate)));

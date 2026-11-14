@@ -99,7 +99,7 @@ export function Reports() {
         title="Reports"
         description="Figures for the financial year, worked out from invoices, purchase bills, expenses and payments."
         actions={
-          <select className={cn(inputClasses, "h-10 w-auto")} value={fy} onChange={(e) => setFy(Number(e.target.value))} aria-label="Financial year">
+          <select className={cn(inputClasses.replace("w-full ", ""), "h-10 w-auto")} value={fy} onChange={(e) => setFy(Number(e.target.value))} aria-label="Financial year">
             {years.map((y) => <option key={y} value={y}>{fyLabel(y)}</option>)}
           </select>
         }

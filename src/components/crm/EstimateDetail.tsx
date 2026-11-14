@@ -108,7 +108,7 @@ function EstimateDetail({ id }: { id: string }) {
               <select
                 value={String(est.status ?? "draft")}
                 onChange={(e) => setStatus(e.target.value)}
-                className={cn(inputClasses, "h-10 w-auto")}
+                className={cn(inputClasses.replace("w-full ", ""), "h-10 w-auto")}
                 aria-label="Status"
               >
                 {ESTIMATE_STATUS.map((o) => (
