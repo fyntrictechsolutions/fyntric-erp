@@ -3,7 +3,6 @@
 import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { ROLES, type Role } from "@/config/roles";
 import { db, firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import type { UserProfile } from "@/types";
 
@@ -42,16 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ref,
       (snap) => {
         if (snap.exists()) {
-          const data = snap.data();
-          // A role typed by hand in the Firebase console (e.g. "Admin") must not crash the app:
-          // anything that isn't a known role is held at the waiting screen with an explanation.
-          const valid = data.role === "pending" || ROLES.includes(data.role as Role);
-          setProfile({
-            id: snap.id,
-            ...data,
-            role: valid ? data.role : "pending",
-            invalidRole: valid ? undefined : String(data.role),
-          } as UserProfile);
+          setProfile({ id: snap.id, ...snap.data() } as UserProfile);
           setLoading(false);
           return;
         }
