@@ -4,6 +4,7 @@ import { Clock, LogOut, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { Logo } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -40,7 +41,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <SettingsProvider>
+      <AppShell>{children}</AppShell>
+    </SettingsProvider>
+  );
 }
 
 function SetupNeeded() {

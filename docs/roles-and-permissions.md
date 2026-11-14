@@ -9,28 +9,39 @@ The matrix lives in two places that must stay in sync:
 
 ## Who sees what
 
+The same table is shown in the app under **Users & roles > Roles & permissions**, generated from `roles.ts`.
+
 Legend: **Full** = view, add, edit, delete all records · **View** = read-only, all records · **Own** = add, and see/edit only their own entries · **Linked** = only records for their client company · – = hidden
 
 | Module | Admin | Project Manager | HR Manager | Sales Staff | Other Staff | Client | Investor | Viewer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Employees | Full | View | Full | View | View | – | – | – |
-| Attendance | Full | Own | Full | Own | Own | – | – | – |
-| Leave | Full (approves) | Own | Full (approves) | Own | Own | – | – | – |
-| Leads | Full | View | – | Full | – | – | – | View |
+| Employees | Full | View | View | – | – | – | View | View |
+| Attendance (team view) | Full | View & correct | View | – | – | – | View | View |
+| My Attendance (check in/out) | Own | Own | Own | Own | Own | – | – | – |
+| Leave | Full (approves) | View all, edit own | Full (approves) | Own | Own | – | View | View |
+| Leads and follow-ups | Full | View | – | Full | – | – | – | View |
+| Estimates | Full | View | – | Full | – | – | View | View |
 | Clients | Full | View | – | Full | – | – | View | View |
+| Products & services | Full | View | View | Full | View | – | View | View |
 | Projects | Full | Full | View | View | View | Linked | View | View |
 | Timesheets | Full | Full | Own | Own | Own | – | – | – |
-| Invoices | Full | View | – | Add & edit (no delete) | – | Linked | View | – |
-| Expenses | Full (approves) | Own | Own | Own | Own | – | View | – |
-| Users & roles | Full | – | – | – | – | – | – | – |
+| Suppliers, purchase bills | Full | – | – | – | – | – | View | View |
+| Invoices | Full | View | – | Add & edit (no delete) | – | Linked | View | View |
+| Payments | Full | – | – | Record received | – | – | View | View |
+| Expenses | Full (approves) | Own | Own | Own | Own | – | View | View |
+| Reports | Full | – | – | – | – | – | View | View |
+| Settings, Users & roles | Full | – | – | – | – | – | – | – |
 
 ## Rules that protect the workflow
 
 - New sign-ups are **pending** and see nothing until an admin gives them a role. Nobody can set their own role.
+- **Invitations** (`invites/{email}`) let an admin set the role in advance. The person gets it on first sign-in only if their email is verified (Google sign-in) and matches; the rules check the role, client and employee link against the invitation.
+- Giving someone a team role (Project Manager, HR, Sales, Other Staff) creates their **employee record** automatically; only admins edit employee records.
 - Admins can't change their own role or disable themselves, so the company always keeps an admin.
 - Staff can edit or withdraw their own leave and expense claims **only while pending**, and can never approve them.
-- Staff can add a check-out time to their attendance but can't change the date or check-in time.
-- Every record stores who created it (`userId`), and that can't be changed afterwards.
+- Staff check in and check out once; afterwards only Admin and Project Managers can correct the entry.
+- Sales staff can record money **received** against invoices; only admins record money paid out against purchase bills.
+- Every record stores who created it (`userId`) and whose employee record it belongs to (`employeeId`), and neither can be changed afterwards.
 - Disabling a user (Users & roles > Account active) cuts off their access immediately.
 - Project budgets are hidden from Clients and Other Staff in the app.
 

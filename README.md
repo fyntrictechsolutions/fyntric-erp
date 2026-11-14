@@ -30,9 +30,15 @@ src/
     roles.ts              Roles and the permission matrix (single source of truth for the UI)
     modules/              One file per area describing each module's fields, columns, statuses and actions
     navigation.ts         Sidebar menu
+    settingsDefaults.ts   Default business details, dropdown lists (incl. Kerala holidays) and app settings
   components/
     resource/             Generic list + form screen used by every module
-    dashboard/  hr/  admin/  auth/  layout/  ui/
+    common/DetailShell    Shared pieces for detail pages (?id= routes), tabs
+    crm/                  Lead details (follow-ups) and printable estimate
+    hr/                   Check-in card, employee details with attendance calendar
+    settings/             Settings page and the live settings provider
+    reports/              Reports (P&L, sales, delivery, GST, assets, dues, wages)
+    dashboard/  admin/  auth/  layout/  ui/
   hooks/useCollection.ts  Live Firestore queries, scoped to what the user may see
   lib/                    Firebase setup, record helpers, formatting
 firestore.rules           Server-side permissions (mirror of src/config/roles.ts)

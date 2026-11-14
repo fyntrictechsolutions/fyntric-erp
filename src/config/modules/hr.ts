@@ -1,15 +1,17 @@
 import { CalendarCheck, CalendarOff, Check, Users, X } from "lucide-react";
 import { daysInclusive, hoursBetween, nowTime, todayISO } from "@/lib/format";
-import { APPROVAL_STATUS, DEPARTMENTS } from "./options";
+import { APPROVAL_STATUS } from "./options";
 import type { ModuleDefinition } from "./types";
 
 export const employeesModule: ModuleDefinition = {
   key: "employees",
   title: "Employees",
   singular: "Employee",
-  description: "Team directory with roles, departments and joining details.",
+  description: "Team records. A record is created automatically when you approve or invite a team member; admins fill in the rest.",
   icon: Users,
   href: "/hr/employees",
+  noManualCreate: true,
+  detailHref: (id) => `/hr/employees/view?id=${id}`,
   statusField: "status",
   searchFields: ["fullName", "employeeCode", "email", "designation", "department"],
   columns: ["fullName", "employeeCode", "department", "designation", "joiningDate", "status"],
@@ -18,7 +20,7 @@ export const employeesModule: ModuleDefinition = {
     { name: "employeeCode", label: "Employee ID", type: "text", placeholder: "FT-001" },
     { name: "email", label: "Work email", type: "email" },
     { name: "phone", label: "Phone", type: "tel" },
-    { name: "department", label: "Department", type: "select", options: DEPARTMENTS },
+    { name: "department", label: "Department", type: "select", list: "departments" },
     { name: "designation", label: "Designation", type: "text", placeholder: "Senior Developer" },
     {
       name: "employmentType",
@@ -44,6 +46,8 @@ export const employeesModule: ModuleDefinition = {
         { value: "exited", label: "Exited", tone: "neutral" },
       ],
     },
+    { name: "dateOfBirth", label: "Date of birth", type: "date" },
+    { name: "bloodGroup", label: "Blood group", type: "text" },
     { name: "emergencyContact", label: "Emergency contact", type: "text" },
     { name: "address", label: "Address", type: "textarea", wide: true },
   ],
@@ -51,12 +55,14 @@ export const employeesModule: ModuleDefinition = {
 
 export const attendanceModule: ModuleDefinition = {
   key: "attendance",
-  title: "Attendance",
+  title: "My Attendance",
   singular: "Attendance entry",
-  description: "Daily check-in and check-out times.",
+  description: "Your daily check-in and check-out. Only Admin and Project Managers can correct an entry.",
   icon: CalendarCheck,
   href: "/hr/attendance",
-  ownerLabel: "Employee",
+  noManualCreate: true,
+  ownRecordsOnly: true,
+  managersEditOnly: true,
   statusField: "workMode",
   searchFields: ["userName", "date", "notes"],
   columns: ["date", "checkIn", "checkOut", "hours", "workMode"],
