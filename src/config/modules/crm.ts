@@ -1,6 +1,6 @@
 import { Building2, Handshake, Target } from "lucide-react";
 import { createRecord, updateRecord } from "@/lib/records";
-import { SERVICES } from "./options";
+import { nowTime, todayISO } from "@/lib/format";
 import type { ModuleDefinition } from "./types";
 
 export const leadsModule: ModuleDefinition = {
@@ -11,30 +11,34 @@ export const leadsModule: ModuleDefinition = {
   icon: Target,
   href: "/crm/leads",
   ownerLabel: "Added by",
+  detailHref: (id) => `/crm/leads/view?id=${id}`,
+  // Every new lead starts with an introduction call at the moment it was added.
+  afterCreate: async (id, data, { profile }) => {
+    await createRecord(
+      "followups",
+      {
+        leadId: id,
+        leadIdLabel: data.name,
+        date: todayISO(),
+        time: nowTime(),
+        mode: "Phone call",
+        goal: "Introduction Call",
+        status: "scheduled",
+        isFirstCall: true,
+      },
+      profile,
+    );
+  },
   statusField: "stage",
   searchFields: ["name", "company", "email", "phone", "service"],
-  columns: ["name", "company", "service", "estimatedValue", "nextFollowUp", "stage"],
+  columns: ["name", "company", "phone", "service", "estimatedValue", "stage"],
   fields: [
     { name: "name", label: "Contact name", type: "text", required: true },
     { name: "company", label: "Company", type: "text" },
     { name: "email", label: "Email", type: "email" },
     { name: "phone", label: "Phone / WhatsApp", type: "tel" },
-    {
-      name: "source",
-      label: "Source",
-      type: "select",
-      defaultValue: "website",
-      options: [
-        { value: "website", label: "Website" },
-        { value: "whatsapp", label: "WhatsApp" },
-        { value: "referral", label: "Referral" },
-        { value: "linkedin", label: "LinkedIn" },
-        { value: "outreach", label: "Cold outreach" },
-        { value: "event", label: "Event" },
-        { value: "other", label: "Other" },
-      ],
-    },
-    { name: "service", label: "Service interested in", type: "select", options: SERVICES },
+    { name: "source", label: "Source", type: "select", list: "leadSources" },
+    { name: "service", label: "Service interested in", type: "select", list: "services" },
     { name: "estimatedValue", label: "Estimated value", type: "currency" },
     {
       name: "stage",
@@ -51,7 +55,6 @@ export const leadsModule: ModuleDefinition = {
         { value: "lost", label: "Lost", tone: "red" },
       ],
     },
-    { name: "nextFollowUp", label: "Next follow-up", type: "date" },
     { name: "notes", label: "Notes", type: "textarea", wide: true },
   ],
   actions: [

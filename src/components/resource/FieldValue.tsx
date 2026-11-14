@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { FieldDefinition } from "@/config/modules";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -11,9 +12,14 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
   switch (field.type) {
     case "select": {
       if (!value) return empty;
+      if (field.list) return <>{String(value)}</>;
       const opt = field.options?.find((o) => o.value === value);
       return <Badge tone={opt?.tone}>{opt?.label ?? String(value)}</Badge>;
     }
+    case "checkbox":
+      return value ? <Check className="size-4 text-emerald-600" aria-label="Yes" /> : empty;
+    case "items":
+      return Array.isArray(value) && value.length ? <>{value.length} item{value.length === 1 ? "" : "s"}</> : empty;
     case "reference":
       return record[`${field.name}Label`] ? <>{String(record[`${field.name}Label`])}</> : empty;
     case "currency":
@@ -37,6 +43,6 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
       return <span className="tabular-nums">{String(value)}{field.type === "percent" ? "%" : ""}</span>;
     }
     default:
-      return value ? <span className="line-clamp-2">{String(value)}</span> : empty;
+      return value ? <span className="line-clamp-2 whitespace-pre-line">{String(value)}</span> : empty;
   }
 }

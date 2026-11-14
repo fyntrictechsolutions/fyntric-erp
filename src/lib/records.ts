@@ -22,9 +22,11 @@ export function collectionName(module: ModuleKey): string {
  * only ask for their records, clients only for records linked to them.
  * Firestore rules reject any query that could return more than that.
  */
-export function scopedQuery(module: ModuleKey, profile: UserProfile): Query | null {
+export function scopedQuery(module: ModuleKey, profile: UserProfile, ownOnly = false): Query | null {
   const { read } = permissionFor(profile.role, module);
   const ref = collection(db(), collectionName(module));
+  if (read === "none") return null;
+  if (ownOnly) return query(ref, where("userId", "==", profile.id));
   if (read === "all") return ref;
   if (read === "own") return query(ref, where("userId", "==", profile.id));
   if (read === "client") return profile.clientId ? query(ref, where("clientId", "==", profile.clientId)) : null;
@@ -44,6 +46,8 @@ export async function createRecord(module: ModuleKey, data: Record<string, unkno
       ...data,
       userId: profile.id,
       userName: profile.displayName,
+      // Lets HR see a person's attendance and leave on their employee page.
+      employeeId: (data.employeeId as string | undefined) ?? profile.employeeId ?? null,
       createdBy: profile.id,
       createdAt: now,
       updatedAt: now,
@@ -52,8 +56,8 @@ export async function createRecord(module: ModuleKey, data: Record<string, unkno
 }
 
 export async function updateRecord(module: ModuleKey, id: string, data: Record<string, unknown>) {
-  const { id: _id, createdAt, createdBy, userId, userName, ...rest } = data as BaseRecord;
-  void _id; void createdAt; void createdBy; void userId; void userName;
+  const { id: _id, createdAt, createdBy, userId, userName, employeeId, ...rest } = data as BaseRecord;
+  void _id; void createdAt; void createdBy; void userId; void userName; void employeeId;
   return updateDoc(doc(db(), collectionName(module), id), clean({ ...rest, updatedAt: Date.now() }));
 }
 

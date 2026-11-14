@@ -1,6 +1,7 @@
 "use client";
 
-import { onSnapshot, type Query } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, type Query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useEffect, useMemo, useState } from "react";
 import { canRead, type ModuleKey } from "@/config/roles";
 import { scopedQuery } from "@/lib/records";
@@ -45,13 +46,37 @@ export function useLiveQuery<T extends BaseRecord = BaseRecord>(
 }
 
 /** Live records of a module that the signed-in user is allowed to see (empty if none). */
-export function useModuleRecords<T extends BaseRecord = BaseRecord>(module: ModuleKey, profile: UserProfile) {
+export function useModuleRecords<T extends BaseRecord = BaseRecord>(module: ModuleKey, profile: UserProfile, ownOnly = false) {
   const allowed = canRead(profile.role, module);
   return {
     allowed,
     ...useLiveQuery<T>(
-      () => (allowed ? scopedQuery(module, profile) : null),
-      `${module}:${profile.id}:${profile.role}:${profile.clientId ?? ""}`,
+      () => (allowed ? scopedQuery(module, profile, ownOnly) : null),
+      `${module}:${profile.id}:${profile.role}:${profile.clientId ?? ""}:${ownOnly}`,
     ),
   };
+}
+
+/** Live records of a module matching one field (e.g. follow-ups of a lead). Caller must have read access to all. */
+export function useRecordsWhere<T extends BaseRecord = BaseRecord>(module: ModuleKey, field: string, value: string | undefined | null) {
+  return useLiveQuery<T>(
+    () => (value ? query(collection(db(), module), where(field, "==", value)) : null),
+    `${module}:${field}:${value ?? ""}`,
+  );
+}
+
+/** One live record by id. */
+export function useRecord<T extends BaseRecord = BaseRecord>(module: ModuleKey | "users", id: string | null | undefined) {
+  const [state, setState] = useState<{ id: string; data: T | null; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    return onSnapshot(
+      doc(db(), module, id),
+      (snap) => setState({ id, data: snap.exists() ? ({ id: snap.id, ...snap.data() } as T) : null, error: null }),
+      (err) => setState({ id, data: null, error: err.message }),
+    );
+  }, [module, id]);
+  if (!id) return { data: null, loading: false, error: null };
+  if (!state || state.id !== id) return { data: null, loading: true, error: null };
+  return { data: state.data, loading: false, error: state.error };
 }

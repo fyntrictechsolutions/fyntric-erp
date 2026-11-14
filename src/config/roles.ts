@@ -34,19 +34,41 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   pending: "Pending approval",
 };
 
+export const ROLE_DESCRIPTIONS: Record<Role, string> = {
+  admin: "Runs the company account: everything, including users, settings, purchases and payments.",
+  project_manager: "Owns projects and timesheets, edits attendance, and can see sales and finance for delivery.",
+  hr_manager: "Approves leave and sees the team's employee records and attendance.",
+  sales: "Works leads, follow-ups, estimates, clients and invoices, and records payments received.",
+  staff: "Checks in, applies for leave, logs timesheets and claims expenses.",
+  client: "Sees only their own company's projects and invoices.",
+  investor: "Read-only view of the business: projects, finance, purchases and reports.",
+  viewer: "Read-only view of sales, projects, team and reports.",
+};
+
 /** Roles that belong to Fyntric employees (they get attendance, leave, timesheets, expenses). */
 export const INTERNAL_ROLES: Role[] = ["admin", "project_manager", "hr_manager", "sales", "staff"];
+
+/** Roles that get an employee record automatically when approved or invited. */
+export const EMPLOYEE_ROLES: Role[] = ["project_manager", "hr_manager", "sales", "staff"];
 
 export type ModuleKey =
   | "employees"
   | "attendance"
   | "leave"
   | "leads"
+  | "followups"
+  | "estimates"
   | "clients"
+  | "products"
   | "projects"
   | "timesheets"
+  | "suppliers"
+  | "purchases"
   | "invoices"
+  | "payments"
   | "expenses"
+  | "reports"
+  | "settings"
   | "users";
 
 /**
@@ -60,7 +82,7 @@ export type ReadScope = "all" | "own" | "client" | "none";
 
 export interface ModulePermission {
   read: ReadScope;
-  /** Can add new records. Records created by "own"-scoped users are stamped with their userId. */
+  /** Can add new records. Records are always stamped with the creator's userId. */
   create: boolean;
   /** Can edit any record ("all"), only their own ("own"), or nothing. */
   update: "all" | "own" | "none";
@@ -73,54 +95,115 @@ const FULL: ModulePermission = { read: "all", create: true, update: "all", delet
 const OWN: ModulePermission = { read: "own", create: true, update: "own", delete: "own" };
 const CLIENT_READ: ModulePermission = { read: "client", create: false, update: "none", delete: "none" };
 
-/** Same permissions for every internal staff role, overridden per role where needed. */
-function internal(overrides: Partial<Record<Role, ModulePermission>>, base: ModulePermission): Record<Role, ModulePermission> {
+/** Builds one module's row: admin always has FULL, everyone else NONE unless listed. */
+function row(perms: Partial<Record<Role, ModulePermission>>): Record<Role, ModulePermission> {
   return {
     admin: FULL,
-    project_manager: base,
-    hr_manager: base,
-    sales: base,
-    staff: base,
+    project_manager: NONE,
+    hr_manager: NONE,
+    sales: NONE,
+    staff: NONE,
     client: NONE,
     investor: NONE,
     viewer: NONE,
-    ...overrides,
+    ...perms,
   };
 }
 
+/** Same permission for every internal role except admin. */
+function staffWide(p: ModulePermission): Partial<Record<Role, ModulePermission>> {
+  return { project_manager: p, hr_manager: p, sales: p, staff: p };
+}
+
 export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
-  // HR
-  employees: internal({ hr_manager: FULL, investor: NONE }, READ_ALL),
-  attendance: internal({ hr_manager: FULL }, OWN),
-  leave: internal({ hr_manager: FULL }, OWN),
+  // People
+  employees: row({ hr_manager: READ_ALL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
+  attendance: row({
+    ...staffWide({ read: "own", create: true, update: "none", delete: "none" }),
+    // Managers see everyone's attendance on the employee pages; PM can also correct entries.
+    project_manager: { read: "all", create: true, update: "all", delete: "none" },
+    hr_manager: { read: "all", create: true, update: "none", delete: "none" },
+    investor: READ_ALL,
+    viewer: READ_ALL,
+  }),
+  leave: row({
+    ...staffWide(OWN),
+    hr_manager: FULL,
+    project_manager: { ...OWN, read: "all" },
+    investor: READ_ALL,
+    viewer: READ_ALL,
+  }),
 
-  // CRM
-  leads: internal({ sales: FULL, project_manager: READ_ALL, viewer: READ_ALL }, NONE),
-  clients: internal({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }, NONE),
+  // Sales
+  leads: row({ sales: FULL, project_manager: READ_ALL, viewer: READ_ALL }),
+  followups: row({ sales: FULL, project_manager: READ_ALL, viewer: READ_ALL }),
+  estimates: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
+  clients: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
+  products: row({ ...staffWide(READ_ALL), sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
 
-  // Projects
-  projects: internal(
-    { project_manager: FULL, client: CLIENT_READ, investor: READ_ALL, viewer: READ_ALL },
-    READ_ALL,
-  ),
-  timesheets: internal({ project_manager: FULL }, OWN),
+  // Delivery
+  projects: row({ ...staffWide(READ_ALL), project_manager: FULL, client: CLIENT_READ, investor: READ_ALL, viewer: READ_ALL }),
+  timesheets: row({ ...staffWide(OWN), project_manager: FULL }),
+
+  // Purchases
+  suppliers: row({ investor: READ_ALL, viewer: READ_ALL }),
+  purchases: row({ investor: READ_ALL, viewer: READ_ALL }),
 
   // Finance
-  invoices: internal(
-    { sales: { read: "all", create: true, update: "all", delete: "none" }, project_manager: READ_ALL, client: CLIENT_READ, investor: READ_ALL },
-    NONE,
-  ),
-  expenses: internal({ investor: READ_ALL }, OWN),
+  invoices: row({
+    sales: { read: "all", create: true, update: "all", delete: "none" },
+    project_manager: READ_ALL,
+    client: CLIENT_READ,
+    investor: READ_ALL,
+    viewer: READ_ALL,
+  }),
+  payments: row({ sales: { read: "all", create: true, update: "none", delete: "none" }, investor: READ_ALL, viewer: READ_ALL }),
+  expenses: row({ ...staffWide(OWN), investor: READ_ALL, viewer: READ_ALL }),
 
-  // Administration
-  users: internal({}, NONE),
+  // Insights and administration (pages, not collections)
+  reports: row({ investor: READ_ALL, viewer: READ_ALL }),
+  settings: row({}),
+  users: row({}),
+};
+
+/** Modules shown in the role matrix, with a readable name. */
+export const MODULE_LABELS: Record<ModuleKey, string> = {
+  employees: "Employees",
+  attendance: "Attendance",
+  leave: "Leave",
+  leads: "Leads",
+  followups: "Lead follow-ups",
+  estimates: "Estimates",
+  clients: "Clients",
+  products: "Products & services",
+  projects: "Projects",
+  timesheets: "Timesheets",
+  suppliers: "Suppliers",
+  purchases: "Purchase bills",
+  invoices: "Invoices",
+  payments: "Payments",
+  expenses: "Expenses",
+  reports: "Reports",
+  settings: "Settings",
+  users: "Users & roles",
 };
 
 export function permissionFor(role: UserRole | undefined, module: ModuleKey): ModulePermission {
   if (!role || role === "pending") return NONE;
-  return PERMISSIONS[module][role];
+  return PERMISSIONS[module][role] ?? NONE;
 }
 
 export function canRead(role: UserRole | undefined, module: ModuleKey): boolean {
   return permissionFor(role, module).read !== "none";
+}
+
+/** One-word summary of a permission for the role matrix. */
+export function describePermission(p: ModulePermission): string {
+  if (p.read === "none") return "—";
+  if (p.read === "client") return "Own company";
+  if (p.read === "own") return p.create ? "Own entries" : "Own (view)";
+  if (p.update === "all" && p.delete === "all") return "Full";
+  if (p.update === "all") return "Add & edit";
+  if (p.create) return p.update === "own" ? "View all, edit own" : "View & add";
+  return "View";
 }

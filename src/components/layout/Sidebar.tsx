@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/components/auth/AuthProvider";
-import { NAVIGATION } from "@/config/navigation";
-import { canRead } from "@/config/roles";
+import { NAVIGATION, navVisible } from "@/config/navigation";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
 
@@ -14,7 +13,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   const sections = NAVIGATION.map((s) => ({
     ...s,
-    items: s.items.filter((i) => !i.module || canRead(profile.role, i.module)),
+    items: s.items.filter((i) => navVisible(i, profile.role)),
   })).filter((s) => s.items.length);
 
   return (

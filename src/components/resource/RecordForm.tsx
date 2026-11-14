@@ -1,38 +1,60 @@
 "use client";
 
 import { useState } from "react";
+import { useSettings, type Settings } from "@/components/settings/SettingsProvider";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
-import type { FieldDefinition, ModuleDefinition } from "@/config/modules";
+import type { FieldDefinition, FormContext, ModuleDefinition, SelectOption } from "@/config/modules";
 import type { Role } from "@/config/roles";
 import { cn } from "@/lib/cn";
 import type { BaseRecord } from "@/types";
+import { LineItemsEditor } from "./LineItemsEditor";
 import { ReferenceSelect } from "./ReferenceSelect";
 
 type Values = Record<string, unknown>;
 
+/** Options for a select: fixed ones, or the admin-editable list from Settings. */
+export function optionsFor(field: FieldDefinition, settings: Settings): SelectOption[] {
+  if (field.list) return settings.lists[field.list].map((v) => ({ value: v, label: v }));
+  return field.options ?? [];
+}
+
 /** Initial form values: the record being edited, or each field's default for a new one. */
-export function initialValues(module: ModuleDefinition, record?: BaseRecord | null): Values {
+export function initialValues(module: ModuleDefinition, ctx: FormContext, record?: BaseRecord | null, preset?: Values): Values {
   if (record) return { ...record };
   const values: Values = {};
   for (const f of module.fields) {
     if (f.defaultValue === undefined) continue;
-    values[f.name] = typeof f.defaultValue === "function" ? f.defaultValue() : f.defaultValue;
+    values[f.name] = typeof f.defaultValue === "function" ? f.defaultValue(ctx) : f.defaultValue;
   }
-  return values;
+  return { ...values, ...preset };
 }
 
 /** Turns form strings into stored values (numbers for numeric fields, "" for cleared values becomes null). */
-export function toStoredValues(module: ModuleDefinition, values: Values): Values {
+export function toStoredValues(module: ModuleDefinition, values: Values, ctx: FormContext): Values {
   const out: Values = { ...values };
   for (const f of module.fields) {
     const v = out[f.name];
     if (["number", "currency", "percent"].includes(f.type)) {
       out[f.name] = v === "" || v === undefined || v === null ? null : Number(v);
+    } else if (f.type === "checkbox") {
+      out[f.name] = Boolean(v);
     } else if (v === "") {
       out[f.name] = null;
     }
   }
-  return module.beforeSave ? module.beforeSave(out) : out;
+  return module.beforeSave ? module.beforeSave(out, ctx) : out;
+}
+
+/** Fields this person sees in the form for these values. */
+export function visibleFields(module: ModuleDefinition, values: Values, role: Role, isManager: boolean) {
+  return module.fields.filter(
+    (f) =>
+      !f.computed &&
+      !f.hidden &&
+      !(f.managerOnly && !isManager) &&
+      !f.hiddenFor?.includes(role) &&
+      (!f.showWhen || f.showWhen(values)),
+  );
 }
 
 interface RecordFormProps {
@@ -48,15 +70,12 @@ interface RecordFormProps {
 
 export function RecordForm({ formId, module, values, onChange, onSubmit, role, isManager, isEditing }: RecordFormProps) {
   const [touched, setTouched] = useState(false);
-  const visible = module.fields.filter(
-    (f) => !f.computed && !(f.managerOnly && !isManager) && !f.hiddenFor?.includes(role),
-  );
+  const visible = visibleFields(module, values, role, isManager);
   const set = (patch: Values) => onChange({ ...values, ...patch });
 
   return (
     <form
       id={formId}
-      noValidate={false}
       className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2", touched && "[&_:invalid]:border-red-500")}
       onSubmit={(e) => {
         e.preventDefault();
@@ -66,18 +85,33 @@ export function RecordForm({ formId, module, values, onChange, onSubmit, role, i
       onInvalid={() => setTouched(true)}
     >
       {visible.map((field) => (
-        <div key={field.name} className={cn(field.wide && "sm:col-span-2")}>
-          <label htmlFor={`${formId}-${field.name}`} className={labelClasses}>
-            {field.label}
-            {field.required && <span className="text-red-500"> *</span>}
-          </label>
-          <FieldInput
-            id={`${formId}-${field.name}`}
-            field={field}
-            values={values}
-            disabled={isEditing && !isManager && field.lockedAfterCreate}
-            set={set}
-          />
+        <div key={field.name} className={cn((field.wide || field.type === "items") && "sm:col-span-2", field.type === "checkbox" && "self-end")}>
+          {field.type === "checkbox" ? (
+            <label className="flex items-center gap-3 py-2 text-sm font-medium text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 accent-brand-600"
+                checked={Boolean(values[field.name])}
+                disabled={isEditing && !isManager && field.lockedAfterCreate}
+                onChange={(e) => set({ [field.name]: e.target.checked })}
+              />
+              {field.label}
+            </label>
+          ) : (
+            <>
+              <label htmlFor={`${formId}-${field.name}`} className={labelClasses}>
+                {field.label}
+                {field.required && <span className="text-red-500"> *</span>}
+              </label>
+              <FieldInput
+                id={`${formId}-${field.name}`}
+                field={field}
+                values={values}
+                disabled={isEditing && !isManager && field.lockedAfterCreate}
+                set={set}
+              />
+            </>
+          )}
           {field.help && <p className="mt-1 text-xs text-subtle">{field.help}</p>}
         </div>
       ))}
@@ -86,6 +120,7 @@ export function RecordForm({ formId, module, values, onChange, onSubmit, role, i
 }
 
 function FieldInput({ id, field, values, disabled, set }: { id: string; field: FieldDefinition; values: Values; disabled?: boolean; set: (p: Values) => void }) {
+  const settings = useSettings();
   const raw = values[field.name];
   const value = raw === null || raw === undefined ? "" : String(raw);
   const common = { id, name: field.name, required: field.required, disabled, placeholder: field.placeholder, className: inputClasses };
@@ -93,17 +128,21 @@ function FieldInput({ id, field, values, disabled, set }: { id: string; field: F
   switch (field.type) {
     case "textarea":
       return <textarea {...common} rows={3} value={value} onChange={(e) => set({ [field.name]: e.target.value })} />;
-    case "select":
+    case "select": {
+      const options = optionsFor(field, settings);
+      // Keep an old value visible even if it was removed from the list.
+      if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: value });
       return (
         <select {...common} value={value} onChange={(e) => set({ [field.name]: e.target.value })}>
           <option value="">Select…</option>
-          {field.options?.map((o) => (
+          {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
         </select>
       );
+    }
     case "reference":
       return (
         <ReferenceSelect
@@ -115,6 +154,8 @@ function FieldInput({ id, field, values, disabled, set }: { id: string; field: F
           onChange={(v, label) => set({ [field.name]: v, [`${field.name}Label`]: v ? label : "" })}
         />
       );
+    case "items":
+      return <LineItemsEditor value={Array.isArray(raw) ? raw : []} onChange={(items) => set({ [field.name]: items })} />;
     case "number":
     case "currency":
     case "percent":

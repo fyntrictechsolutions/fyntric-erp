@@ -8,14 +8,15 @@ export function moduleAccess(module: ModuleDefinition | ModuleKey, profile: User
   const def = typeof module === "string" ? undefined : module;
   const perm = permissionFor(profile.role, key);
   const isOwner = (r: BaseRecord) => r.userId === profile.id;
-  const ownerMayChange = (r: BaseRecord) => isOwner(r) && (def?.ownerEditableWhen ? def.ownerEditableWhen(r) : true);
+  const ownerMayChange = (r: BaseRecord) =>
+    !def?.managersEditOnly && isOwner(r) && (def?.ownerEditableWhen ? def.ownerEditableWhen(r) : true);
 
   return {
     perm,
-    canCreate: perm.create,
+    canCreate: perm.create && !def?.noManualCreate,
     /** Manages every record (e.g. HR for leave): can approve and set manager-only fields. */
     isManager: perm.update === "all",
-    seesEveryone: perm.read === "all",
+    seesEveryone: perm.read === "all" && !def?.ownRecordsOnly,
     canEdit: (r: BaseRecord) => perm.update === "all" || (perm.update === "own" && ownerMayChange(r)),
     canDelete: (r: BaseRecord) => perm.delete === "all" || (perm.delete === "own" && ownerMayChange(r)),
   };
