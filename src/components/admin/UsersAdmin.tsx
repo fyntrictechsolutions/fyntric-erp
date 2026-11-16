@@ -1,6 +1,7 @@
 "use client";
 
-import { collection, doc, updateDoc } from "firebase/firestore";
+import { collection, doc } from "firebase/firestore";
+import { loggedUpdate } from "@/lib/audit";
 import { Copy, Mail, MailPlus, MessageCircle, Trash2 } from "lucide-react";
 import { Pencil, Search, ShieldCheck } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -169,7 +170,7 @@ function EditUser({ user, isSelf, onClose }: { user: UserProfile; isSelf: boolea
       if (isEmployeeRole(role) && !employeeId) {
         link = await employeeLinkOnApproval({ ...user, displayName, employeeId: undefined }, admin);
       }
-      await updateDoc(doc(db(), "users", user.id), {
+      await loggedUpdate(doc(db(), "users", user.id), {
         role,
         displayName,
         active,

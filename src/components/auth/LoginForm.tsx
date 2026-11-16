@@ -15,6 +15,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
 import { siteConfig } from "@/config/site";
+import { markSignedIn } from "@/lib/audit";
 import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "./AuthProvider";
 
@@ -66,11 +67,16 @@ export function LoginForm() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const auth = firebaseAuth();
-    if (mode === "signin") void run(() => signInWithEmailAndPassword(auth, email, password));
+    if (mode === "signin")
+      void run(async () => {
+        await signInWithEmailAndPassword(auth, email, password);
+        markSignedIn("Email and password");
+      });
     if (mode === "signup")
       void run(async () => {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         if (name) await updateProfile(cred.user, { displayName: name });
+        markSignedIn("New account (email)");
       });
     if (mode === "reset")
       void run(async () => {
@@ -79,7 +85,11 @@ export function LoginForm() {
       });
   };
 
-  const google = () => void run(() => signInWithPopup(firebaseAuth(), new GoogleAuthProvider()));
+  const google = () =>
+    void run(async () => {
+      await signInWithPopup(firebaseAuth(), new GoogleAuthProvider());
+      markSignedIn("Google");
+    });
 
   return (
     <div className="relative grid min-h-dvh lg:grid-cols-2">

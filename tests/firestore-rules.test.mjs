@@ -8,7 +8,7 @@ import { getFirestore as adminDb } from "firebase-admin/firestore";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
 import {
-  addDoc, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, query, setDoc, updateDoc, where,
+  addDoc, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
 
 const PROJECT = "demo-fyntric";
@@ -105,6 +105,23 @@ describe("hiring, salaries and exits", () => {
     assert.equal(await allowed(setDoc(doc(hr.db, "invites", "boss@test.dev"), { email: "boss@test.dev", role: "admin" })), false);
     const emp = await addDoc(collection(hr.db, "employees"), { fullName: "Hire", userId: hr.uid });
     assert.equal(await allowed(updateDoc(doc(hr.db, "employees", emp.id), { designation: "CEO" })), false);
+  });
+});
+
+describe("activity log", () => {
+  const entry = (uid, extra = {}) => ({ action: "update", module: "leads", changes: [], userId: uid, at: serverTimestamp(), ...extra });
+  test("anyone signed in adds entries for themselves, with the server's time", async () => {
+    for (const r of ["staff", "client", "pending"]) assert.equal(await allowed(addDoc(collection(users[r].db, "logs"), entry(users[r].uid))), true, r);
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "logs"), entry(users.admin.uid))), false, "as someone else");
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "logs"), entry(users.staff.uid, { at: new Date(2020, 0, 1) }))), false, "backdated");
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "logs"), entry(users.staff.uid, { action: "hack" }))), false, "unknown action");
+  });
+  test("only admins read it, and nobody edits or deletes entries", async () => {
+    const ref = await addDoc(collection(users.admin.db, "logs"), entry(users.admin.uid, { action: "login" }));
+    assert.equal(await allowed(getDocs(collection(users.admin.db, "logs"))), true);
+    for (const r of ["hr_manager", "staff", "investor", "viewer"]) assert.equal(await allowed(getDocs(collection(users[r].db, "logs"))), false, r);
+    assert.equal(await allowed(updateDoc(doc(users.admin.db, "logs", ref.id), { action: "logout" })), false);
+    assert.equal(await allowed(deleteDoc(doc(users.admin.db, "logs", ref.id))), false);
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
+import { loggedSet } from "@/lib/audit";
 import { History, Plus, TrendingUp, Wallet, X } from "lucide-react";
 import { useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -175,7 +176,7 @@ function SalaryForm({ employee, existing, revise, onClose }: { employee: BaseRec
       const next: SalaryStructure = { components: clean, total: sumOf(clean), effectiveFrom, notes: notes.trim() || "", savedBy: profile.displayName, savedAt: Date.now() };
       const history = [...(existing?.history ?? [])];
       if (revise && current) history.push({ ...current, endedOn: addDays(effectiveFrom, -1) });
-      await setDoc(doc(db(), "salaries", employee.id), {
+      await loggedSet(doc(db(), "salaries", employee.id), {
         employeeId: employee.id,
         employeeName: employee.fullName ?? "",
         current: next,

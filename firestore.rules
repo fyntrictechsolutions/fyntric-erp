@@ -108,6 +108,19 @@ service cloud.firestore {
         && request.auth.token.email.lower() == id;
     }
 
+    // Activity log: anyone signed in adds entries stamped with their own account and the server's time.
+    // Nobody can change or delete an entry, so the log can be trusted. Only admins read it.
+    match /logs/{id} {
+      allow read: if role() == 'admin';
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.at == request.time
+        && request.resource.data.action in ['login', 'logout', 'session', 'create', 'update', 'delete']
+        && request.resource.data.changes is list
+        && request.resource.data.changes.size() <= 40;
+      allow update, delete: if false;
+    }
+
     // Company settings: everyone signed in reads them, admins change them.
     match /settings/{section} {
       allow read: if !hasRole(['none', 'pending']);

@@ -1,4 +1,5 @@
-import { addDoc, collection, deleteDoc, doc } from "firebase/firestore";
+import { collection, doc } from "firebase/firestore";
+import { loggedAdd, loggedDelete } from "@/lib/audit";
 import { db } from "@/lib/firebase";
 import type { UserProfile } from "@/types";
 
@@ -82,7 +83,7 @@ export async function saveFile(
 ) {
   const prepared = await prepareFile(file);
   const now = Date.now();
-  return addDoc(collection(db(), "files"), {
+  return loggedAdd(collection(db(), "files"), {
     ...owner,
     name: file.name,
     ...prepared,
@@ -95,7 +96,7 @@ export async function saveFile(
 }
 
 export function deleteFile(id: string) {
-  return deleteDoc(doc(db(), "files", id));
+  return loggedDelete(doc(db(), "files", id));
 }
 
 /** Opens a stored file in a new tab (browsers block opening data: URLs directly). */
