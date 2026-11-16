@@ -129,7 +129,8 @@ function FieldInput({ id, field, values, disabled, set }: { id: string; field: F
     case "textarea":
       return <textarea {...common} rows={3} value={value} onChange={(e) => set({ [field.name]: e.target.value })} />;
     case "select": {
-      const options = optionsFor(field, settings);
+      let options = [...optionsFor(field, settings)];
+      if (field.formValues) options = options.filter((o) => field.formValues!.includes(o.value) || o.value === value);
       // Keep an old value visible even if it was removed from the list.
       if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: value });
       return (
