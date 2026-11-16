@@ -1,5 +1,7 @@
 import { Check, FileText, HandCoins, Receipt, Wallet, X } from "lucide-react";
-import { todayISO } from "@/lib/format";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { formatCurrency, todayISO } from "@/lib/format";
 import { recalcPaid } from "@/lib/payments";
 import { discountedTotals } from "@/lib/lineItems";
 import { docNumber } from "./options";
@@ -16,6 +18,7 @@ export const invoicesModule: ModuleDefinition = {
   description: "Bills raised to clients, with GST and payment status.",
   icon: FileText,
   href: "/finance/invoices",
+  detailHref: (id) => `/finance/invoices/view?id=${id}`,
   statusField: "status",
   searchFields: ["invoiceNumber", "clientIdLabel", "projectIdLabel"],
   columns: ["invoiceNumber", "clientId", "issueDate", "dueDate", "total", "balance", "status"],
@@ -39,6 +42,9 @@ export const invoicesModule: ModuleDefinition = {
       label: "Status",
       type: "select",
       defaultValue: "draft",
+      // Paid and part paid come from the payments recorded against the invoice.
+      formValues: ["draft", "sent", "overdue", "cancelled"],
+      help: "Paid / part paid is set automatically when you record a payment.",
       options: [
         { value: "draft", label: "Draft", tone: "neutral" },
         { value: "sent", label: "Sent", tone: "blue" },
@@ -48,7 +54,7 @@ export const invoicesModule: ModuleDefinition = {
         { value: "cancelled", label: "Cancelled", tone: "neutral" },
       ],
     },
-    { name: "paidDate", label: "Paid on", type: "date" },
+    { name: "paidDate", label: "Paid on", type: "date", computed: true },
     { name: "notes", label: "Notes", type: "textarea", wide: true },
   ],
   validate: (v) => (hasItems(v) || isLegacy(v) ? null : "Add at least one item."),
@@ -70,6 +76,10 @@ export const invoicesModule: ModuleDefinition = {
       taxTotal = Math.round((total - amount) * 100) / 100;
     }
     const paid = Number(data.amountPaid) || 0;
+    const balance = Math.round((total - paid) * 100) / 100;
+    // With payments recorded, the status follows them (e.g. after the invoice total is edited).
+    let status = data.status;
+    if (paid > 0 && status !== "cancelled") status = balance <= 0 ? "paid" : "partial";
     return {
       ...data,
       invoiceNumber: (data.invoiceNumber as string)?.trim() || docNumber(settings.business.invoicePrefix),
@@ -81,7 +91,8 @@ export const invoicesModule: ModuleDefinition = {
       taxTotal,
       total,
       amountPaid: paid,
-      balance: Math.round((total - paid) * 100) / 100,
+      balance,
+      status,
     };
   },
 };
@@ -151,10 +162,11 @@ export const paymentsModule: ModuleDefinition = {
   description: "Money received against invoices and paid against purchase bills.",
   icon: HandCoins,
   href: "/finance/payments",
+  detailHref: (id) => `/finance/payments/view?id=${id}`,
   ownerLabel: "Recorded by",
   statusField: "direction",
-  searchFields: ["against", "reference", "mode", "notes"],
-  columns: ["date", "direction", "against", "amount", "mode", "reference"],
+  searchFields: ["receiptNumber", "against", "reference", "mode", "notes"],
+  columns: ["date", "receiptNumber", "direction", "against", "amount", "mode", "reference"],
   fields: [
     { name: "direction", label: "Type", type: "select", required: true, defaultValue: "received", options: PAYMENT_DIRECTION, lockedAfterCreate: true, hiddenFor: ["sales"] },
     {
@@ -178,12 +190,33 @@ export const paymentsModule: ModuleDefinition = {
     { name: "mode", label: "Mode", type: "select", list: "paymentModes", defaultValue: "Bank transfer" },
     { name: "reference", label: "Transaction / UTR no.", type: "text" },
     { name: "against", label: "Against", type: "text", computed: true },
+    { name: "receiptNumber", label: "Receipt no.", type: "text", computed: true },
     { name: "notes", label: "Notes", type: "textarea", wide: true },
   ],
+  // Stop typos like 75,000 for 7,500: a payment can't be more than what is still due.
+  validate: async (v, record) => {
+    const received = v.direction !== "paid";
+    const target = received ? "invoices" : "purchases";
+    const id = (received ? v.invoiceId : v.billId) as string | undefined;
+    const amount = Number(v.amount) || 0;
+    if (!id || amount <= 0) return amount < 0 ? "The amount can't be negative." : null;
+    const snap = await getDoc(doc(db(), target, id));
+    if (!snap.exists()) return null;
+    const d = snap.data();
+    // When editing, this payment is already counted in the balance.
+    const already = record && (received ? record.invoiceId : record.billId) === id ? Number(record.amount) || 0 : 0;
+    const due = Math.round(((Number(d.balance ?? d.total) || 0) + already) * 100) / 100;
+    if (amount > due + 0.009)
+      return due > 0
+        ? `That's more than the balance due of ${formatCurrency(due)} on this ${received ? "invoice" : "bill"}. Check the amount.`
+        : `This ${received ? "invoice" : "bill"} is already fully paid.`;
+    return null;
+  },
   beforeSave: (data) => {
     const received = data.direction !== "paid";
     return {
       ...data,
+      receiptNumber: (data.receiptNumber as string) || docNumber(received ? "RCT" : "PAY"),
       invoiceId: received ? data.invoiceId : null,
       invoiceIdLabel: received ? data.invoiceIdLabel : null,
       billId: received ? null : data.billId,

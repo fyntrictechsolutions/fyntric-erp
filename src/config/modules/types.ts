@@ -56,6 +56,8 @@ export interface FieldDefinition {
   hiddenFor?: Role[];
   /** How a number is shown in tables. */
   display?: "progress" | "billingGroups";
+  /** Select fields: only these values can be picked in the form (others still show as badges, e.g. statuses set automatically). */
+  formValues?: string[];
   min?: number;
   max?: number;
   /** Takes the full row in the two-column form. */
@@ -132,8 +134,8 @@ export interface ModuleDefinition {
   managersEditOnly?: boolean;
   /** Clicking a row opens this page. */
   detailHref?: (id: string) => string;
-  /** Checks the form before saving; return a message to stop the save. */
-  validate?: (values: Record<string, unknown>) => string | null;
+  /** Checks the form before saving; return a message to stop the save. `record` is the saved version when editing. */
+  validate?: (values: Record<string, unknown>, record?: BaseRecord) => string | null | Promise<string | null>;
   /** Fill in computed fields before saving. */
   beforeSave?: (data: Record<string, unknown>, ctx: FormContext) => Record<string, unknown>;
   /** Runs after a new record is saved (e.g. schedule a lead's first call). */

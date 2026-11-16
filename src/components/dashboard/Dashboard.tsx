@@ -16,6 +16,17 @@ import { StatCard } from "./StatCard";
 
 const sum = (rows: BaseRecord[], field: string) => rows.reduce((t, r) => t + (Number(r[field]) || 0), 0);
 
+/**
+ * Money that came in during a month: payments received (by payment date), plus invoices
+ * marked paid by hand before payments were recorded (no payments against them).
+ * Without access to payments, falls back to invoices fully paid that month.
+ */
+function collectedIn(month: string, invoices: BaseRecord[], payments: BaseRecord[] | null) {
+  const manualPaid = invoices.filter((i) => i.status === "paid" && monthOf(i.paidDate ?? i.issueDate) === month && (payments === null || !(Number(i.amountPaid) > 0)));
+  const received = (payments ?? []).filter((p) => p.direction !== "paid" && p.invoiceId && monthOf(p.date) === month);
+  return { amount: sum(manualPaid, "total") + sum(received, "amount"), count: manualPaid.length + received.length };
+}
+
 /** Overview for whoever is signed in: each card only appears if their role can see that module. */
 export function Dashboard() {
   const profile = useProfile();
@@ -32,24 +43,26 @@ export function Dashboard() {
   const timesheets = useModuleRecords("timesheets", profile);
   const invoices = useModuleRecords("invoices", profile);
   const expenses = useModuleRecords("expenses", profile);
+  const paymentsQ = useModuleRecords("payments", profile);
+  const payments = paymentsQ.allowed ? paymentsQ.data : null;
 
   const stats = useMemo(() => {
     const activeProjects = projects.data.filter((p) => p.status === "in_progress" || p.status === "planning");
     const openLeads = leads.data.filter((l) => l.stage !== "won" && l.stage !== "lost");
     const outstanding = invoices.data.filter((i) => i.status === "sent" || i.status === "overdue" || i.status === "partial");
-    const paidThisMonth = invoices.data.filter((i) => i.status === "paid" && monthOf(i.paidDate ?? i.issueDate) === thisMonth);
+    const collected = collectedIn(thisMonth, invoices.data, payments);
     return {
       activeProjects,
       openLeads,
       outstanding,
-      paidThisMonth,
+      collected,
       activeEmployees: employees.data.filter((e) => e.status !== "exited").length,
       presentToday: attendance.data.filter((a) => a.date === today).length,
       pendingLeave: leave.data.filter((l) => l.status === "pending").length,
       hoursThisMonth: sum(timesheets.data.filter((t) => monthOf(t.date) === thisMonth), "hours"),
       expensesThisMonth: sum(expenses.data.filter((e) => monthOf(e.date) === thisMonth && e.status !== "rejected"), "amount"),
     };
-  }, [projects.data, leads.data, invoices.data, employees.data, attendance.data, leave.data, timesheets.data, expenses.data, thisMonth, today]);
+  }, [projects.data, leads.data, invoices.data, payments, employees.data, attendance.data, leave.data, timesheets.data, expenses.data, thisMonth, today]);
 
   const greeting = greet();
   const leaveIsMine = leave.allowed && !reviewsLeave;
@@ -72,7 +85,7 @@ export function Dashboard() {
           <StatCard label="Outstanding invoices" value={formatCurrency(stats.outstanding.reduce((t, i) => t + (Number(i.balance ?? i.total) || 0), 0), true)} hint={`${stats.outstanding.length} awaiting payment`} icon={FileText} accent="amber" href="/finance/invoices" loading={invoices.loading} />
         )}
         {invoices.allowed && profile.role !== "client" && (
-          <StatCard label="Collected this month" value={formatCurrency(sum(stats.paidThisMonth, "total"), true)} hint={`${stats.paidThisMonth.length} ${stats.paidThisMonth.length === 1 ? "invoice" : "invoices"} paid`} icon={FileText} accent="green" href="/finance/invoices" loading={invoices.loading} />
+          <StatCard label="Collected this month" value={formatCurrency(stats.collected.amount, true)} hint={`${stats.collected.count} ${stats.collected.count === 1 ? "payment" : "payments"} received`} icon={FileText} accent="green" href={payments ? "/finance/payments" : "/finance/invoices"} loading={invoices.loading || (paymentsQ.allowed && paymentsQ.loading)} />
         )}
         {employees.allowed && (
           <StatCard label="Team members" value={String(stats.activeEmployees)} hint="Active and on notice" icon={Users} accent="cyan" href="/hr/employees" loading={employees.loading} />
@@ -124,12 +137,12 @@ export function Dashboard() {
         )}
 
         {leads.allowed && <PipelineCard leads={leads.data} />}
-        {!leads.allowed && invoices.allowed && <RevenueCard invoices={invoices.data} />}
+        {!leads.allowed && invoices.allowed && <RevenueCard invoices={invoices.data} payments={payments} />}
       </div>
 
       {leads.allowed && invoices.allowed && profile.role !== "client" && (
         <div className="mt-6">
-          <RevenueCard invoices={invoices.data} />
+          <RevenueCard invoices={invoices.data} payments={payments} />
         </div>
       )}
     </div>
@@ -172,17 +185,17 @@ function PipelineCard({ leads }: { leads: BaseRecord[] }) {
   );
 }
 
-function RevenueCard({ invoices }: { invoices: BaseRecord[] }) {
+function RevenueCard({ invoices, payments }: { invoices: BaseRecord[]; payments: BaseRecord[] | null }) {
   const months = useMemo(() => {
     const now = new Date();
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const paid = sum(invoices.filter((inv) => inv.status === "paid" && monthOf(inv.paidDate ?? inv.issueDate) === key), "total");
+      const paid = collectedIn(key, invoices, payments).amount;
       const billed = sum(invoices.filter((inv) => inv.status !== "cancelled" && inv.status !== "draft" && monthOf(inv.issueDate) === key), "total");
       return { key, label: d.toLocaleString("en-IN", { month: "short" }), paid, billed };
     });
-  }, [invoices]);
+  }, [invoices, payments]);
   const max = Math.max(1, ...months.flatMap((m) => [m.paid, m.billed]));
 
   return (

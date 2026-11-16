@@ -21,18 +21,13 @@ import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { groupedTotals } from "@/lib/lineItems";
 import { updateRecord } from "@/lib/records";
+import { phoneForWhatsApp } from "@/lib/share";
 import type { BaseRecord } from "@/types";
 
 export function EstimateDetailPage() {
   const profile = useProfile();
   if (!canRead(profile.role, "estimates")) return <NoAccess />;
   return <WithRecordId>{(id) => <EstimateDetail id={id} />}</WithRecordId>;
-}
-
-function phoneForWhatsApp(phone: unknown) {
-  const digits = String(phone ?? "").replace(/\D/g, "");
-  if (!digits) return "";
-  return digits.length === 10 ? `91${digits}` : digits;
 }
 
 function summaryText(est: BaseRecord, lead: BaseRecord | null, businessName: string) {

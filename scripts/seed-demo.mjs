@@ -143,14 +143,16 @@ const invoices = [
   ["greenleaf", "GreenLeaf Organics", 160000, "sent", -12, null],
   ["acme", "Acme Retail Pvt Ltd", 220000, "overdue", -45, null],
   ["northwind", "Northwind Logistics", 90000, "paid", -5, -2],
+  // Advance of half the project value received.
+  ["greenleaf", "GreenLeaf Organics", 15000, "partial", -3, -1],
 ];
 for (const [i, [clientId, clientIdLabel, amount, status, issued, paid]] of invoices.entries()) {
   const total = amount * 1.18;
-  const amountPaid = status === "paid" ? total : 0;
+  const amountPaid = status === "paid" ? total : status === "partial" ? total / 2 : 0;
   const items = [{ name: i % 2 ? "Development milestone" : "Website development", qty: 1, unit: "Project", rate: amount, taxRate: 18, amount }];
-  await db.doc(`invoices/inv${i}`).set(stamp("sales", { invoiceNumber: `INV-2026-${1001 + i}`, clientId, clientIdLabel, items, amount, taxTotal: total - amount, total, amountPaid, balance: total - amountPaid, status, issueDate: iso(issued), dueDate: iso(issued + 15), paidDate: paid === null ? null : iso(paid) }));
-  if (status === "paid") {
-    await db.doc(`payments/pay${i}`).set(stamp("sales", { direction: "received", invoiceId: `inv${i}`, invoiceIdLabel: `INV-2026-${1001 + i}`, against: `Invoice INV-2026-${1001 + i}`, date: iso(paid), amount: total, mode: "Bank transfer", reference: `UTR${88000 + i}` }));
+  await db.doc(`invoices/inv${i}`).set(stamp("sales", { invoiceNumber: `INV-2026-${1001 + i}`, clientId, clientIdLabel, items, amount, taxTotal: total - amount, total, amountPaid, balance: total - amountPaid, status, issueDate: iso(issued), dueDate: iso(issued + 15), paidDate: status === "paid" ? iso(paid) : null }));
+  if (amountPaid) {
+    await db.doc(`payments/pay${i}`).set(stamp("sales", { direction: "received", receiptNumber: `RCT-2026-${5001 + i}`, invoiceId: `inv${i}`, invoiceIdLabel: `INV-2026-${1001 + i}`, against: `Invoice INV-2026-${1001 + i}`, date: iso(paid), amount: amountPaid, mode: "Bank transfer", reference: `UTR${88000 + i}` }));
   }
 }
 
