@@ -1,5 +1,7 @@
 import { Building2, Handshake, Target } from "lucide-react";
-import { createRecord, updateRecord } from "@/lib/records";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { createRecord, deleteRecord, updateRecord } from "@/lib/records";
 import { nowTime, todayISO } from "@/lib/format";
 import type { ModuleDefinition } from "./types";
 
@@ -63,16 +65,18 @@ export const leadsModule: ModuleDefinition = {
       label: "Convert to client",
       icon: Handshake,
       requires: "manager",
-      when: (r) => r.stage !== "won" && r.stage !== "lost",
+      // Also for leads marked "Won" by hand, as long as no client was made from them yet.
+      when: (r) => r.stage !== "lost" && !r.clientId,
       confirm: "Create a client from this lead and mark the lead as won?",
       run: async (lead, { profile }) => {
-        await createRecord(
+        const client = await createRecord(
           "clients",
           {
             name: (lead.company as string) || (lead.name as string),
             contactPerson: lead.name,
             email: lead.email,
             phone: lead.phone,
+            address: lead.address,
             status: "active",
             country: "India",
             notes: lead.notes,
@@ -80,10 +84,15 @@ export const leadsModule: ModuleDefinition = {
           },
           profile,
         );
-        await updateRecord("leads", lead.id, { stage: "won" });
+        await updateRecord("leads", lead.id, { stage: "won", clientId: client.id, clientIdLabel: (lead.company as string) || (lead.name as string) });
       },
     },
   ],
+  // Follow-up calls belong to the lead, so they go with it. Estimates stay as a record of what was quoted.
+  afterDelete: async (lead) => {
+    const snap = await getDocs(query(collection(db(), "followups"), where("leadId", "==", lead.id)));
+    await Promise.all(snap.docs.map((d) => deleteRecord("followups", d.id)));
+  },
 };
 
 export const clientsModule: ModuleDefinition = {

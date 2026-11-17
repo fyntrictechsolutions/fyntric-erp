@@ -142,4 +142,6 @@ export interface ModuleDefinition {
   afterCreate?: (id: string, data: Record<string, unknown>, ctx: ActionContext) => Promise<void>;
   /** Runs after a record is created, edited or deleted (e.g. update an invoice's paid amount). */
   afterChange?: (data: Record<string, unknown>, ctx: ActionContext) => Promise<void>;
+  /** Runs after a record is deleted (e.g. remove a lead's follow-ups). */
+  afterDelete?: (record: BaseRecord, ctx: ActionContext) => Promise<void>;
 }

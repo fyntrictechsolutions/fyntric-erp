@@ -72,6 +72,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
     if (!window.confirm(`Delete this ${module.singular.toLowerCase()}? This can't be undone.`)) return;
     try {
       await deleteRecord(module.key, record.id);
+      await module.afterDelete?.(record, { profile, settings });
       await module.afterChange?.(record, { profile, settings });
     } catch (e) {
       window.alert(friendlyError(e));
