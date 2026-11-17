@@ -1,13 +1,5 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  query,
-  updateDoc,
-  where,
-  type Query,
-} from "firebase/firestore";
+import { collection, doc, query, where, type Query } from "firebase/firestore";
+import { loggedAdd, loggedDelete, loggedUpdate } from "@/lib/audit";
 import { db } from "@/lib/firebase";
 import { permissionFor, type ModuleKey } from "@/config/roles";
 import type { BaseRecord, UserProfile } from "@/types";
@@ -40,7 +32,7 @@ function clean<T extends Record<string, unknown>>(data: T): T {
 
 export async function createRecord(module: ModuleKey, data: Record<string, unknown>, profile: UserProfile) {
   const now = Date.now();
-  return addDoc(
+  return loggedAdd(
     collection(db(), collectionName(module)),
     clean({
       ...data,
@@ -58,9 +50,9 @@ export async function createRecord(module: ModuleKey, data: Record<string, unkno
 export async function updateRecord(module: ModuleKey, id: string, data: Record<string, unknown>) {
   const { id: _id, createdAt, createdBy, userId, userName, employeeId, ...rest } = data as BaseRecord;
   void _id; void createdAt; void createdBy; void userId; void userName; void employeeId;
-  return updateDoc(doc(db(), collectionName(module), id), clean({ ...rest, updatedAt: Date.now() }));
+  return loggedUpdate(doc(db(), collectionName(module), id), clean({ ...rest, updatedAt: Date.now() }));
 }
 
 export async function deleteRecord(module: ModuleKey, id: string) {
-  return deleteDoc(doc(db(), collectionName(module), id));
+  return loggedDelete(doc(db(), collectionName(module), id));
 }

@@ -72,7 +72,8 @@ export type ModuleKey =
   | "expenses"
   | "reports"
   | "settings"
-  | "users";
+  | "users"
+  | "logs";
 
 /**
  * How much of a module a role can see.
@@ -171,6 +172,8 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
   reports: row({ investor: READ_ALL, viewer: READ_ALL }),
   settings: row({}),
   users: row({}),
+  // Admins only, and read-only: entries can't be edited or deleted.
+  logs: row({}),
 };
 
 /** Modules shown in the role matrix, with a readable name. */
@@ -196,6 +199,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   reports: "Reports",
   settings: "Settings",
   users: "Users & roles",
+  logs: "Activity log",
 };
 
 export function permissionFor(role: UserRole | undefined, module: ModuleKey): ModulePermission {

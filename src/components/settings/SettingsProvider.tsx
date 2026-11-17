@@ -1,6 +1,7 @@
 "use client";
 
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
+import { loggedSet } from "@/lib/audit";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_APP,
@@ -60,5 +61,5 @@ export function useSettings(): Settings {
 
 /** Saves part of one settings section (admins only, enforced by the rules). */
 export function saveSettings<S extends SettingsSection>(section: S, patch: Partial<Settings[S]>) {
-  return setDoc(doc(db(), "settings", section), { ...patch, updatedAt: Date.now() }, { merge: true });
+  return loggedSet(doc(db(), "settings", section), { ...patch, updatedAt: Date.now() }, { merge: true });
 }

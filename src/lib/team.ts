@@ -1,4 +1,5 @@
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { loggedDelete, loggedSet, loggedUpdate } from "@/lib/audit";
 import { EMPLOYEE_ROLES, type Role, type UserRole } from "@/config/roles";
 import { db } from "@/lib/firebase";
 import { todayISO } from "@/lib/format";
@@ -80,12 +81,12 @@ export async function createInvite(
   };
   const { id: _omit, ...data } = invite;
   void _omit;
-  await setDoc(doc(db(), "invites", id), data);
+  await loggedSet(doc(db(), "invites", id), data);
   return invite;
 }
 
 export async function deleteInvite(id: string) {
-  await deleteDoc(doc(db(), "invites", id));
+  await loggedDelete(doc(db(), "invites", id));
 }
 
 /** Message an admin can send to the person they invited. */
@@ -108,10 +109,10 @@ export async function employeeLinkOnApproval(user: UserProfile, admin: UserProfi
   let link: { id: string; label: string };
   if (invite.exists() && invite.data().employeeId) {
     link = { id: invite.data().employeeId, label: invite.data().employeeIdLabel ?? user.displayName };
-    await updateDoc(doc(db(), "employees", link.id), { accountId: user.id, accountEmail: user.email, updatedAt: Date.now() });
+    await loggedUpdate(doc(db(), "employees", link.id), { accountId: user.id, accountEmail: user.email, updatedAt: Date.now() });
   } else {
     link = await createEmployeeFor({ name: user.displayName, email: user.email, accountId: user.id }, admin);
   }
-  if (invite.exists()) await deleteDoc(invite.ref);
+  if (invite.exists()) await loggedDelete(invite.ref);
   return { employeeId: link.id, employeeIdLabel: link.label };
 }

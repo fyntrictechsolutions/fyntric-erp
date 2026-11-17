@@ -1,6 +1,7 @@
 "use client";
 
-import { doc, setDoc, updateDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
+import { loggedSet, loggedUpdate } from "@/lib/audit";
 import { CheckCircle2, ClipboardList, LogOut, Pencil, Plus, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -93,19 +94,19 @@ export function ExitTab({ employee }: { employee: BaseRecord }) {
   const done = checklist.filter((c) => c.done).length;
 
   const toggle = (i: number) =>
-    run(() => updateDoc(ref, { checklist: checklist.map((c, j) => (j === i ? { ...c, done: !c.done } : c)), updatedAt: Date.now() }));
+    run(() => loggedUpdate(ref, { checklist: checklist.map((c, j) => (j === i ? { ...c, done: !c.done } : c)), updatedAt: Date.now() }));
 
   const complete = () =>
     run(async () => {
       if (!window.confirm(`Mark ${employee.fullName}'s exit as complete?${canEditEmployee ? " Their employee status changes to Exited." : ""}`)) return;
-      await updateDoc(ref, { status: "completed", completedOn: todayISO(), updatedAt: Date.now() });
+      await loggedUpdate(ref, { status: "completed", completedOn: todayISO(), updatedAt: Date.now() });
       if (canEditEmployee) await updateRecord("employees", employee.id, { status: "exited", exitDate: exit.lastWorkingDay ?? todayISO() });
     });
 
   const withdraw = () =>
     run(async () => {
       if (!window.confirm("Mark this resignation as withdrawn?")) return;
-      await updateDoc(ref, { status: "withdrawn", updatedAt: Date.now() });
+      await loggedUpdate(ref, { status: "withdrawn", updatedAt: Date.now() });
     });
 
   return (
@@ -191,7 +192,7 @@ function RecordForm({ employee, onClose }: { employee: BaseRecord; onClose: () =
     e.preventDefault();
     setSaving(true);
     try {
-      await setDoc(doc(db(), "exits", employee.id), {
+      await loggedSet(doc(db(), "exits", employee.id), {
         employeeId: employee.id,
         employeeName: employee.fullName ?? "",
         status: "requested",
@@ -266,7 +267,7 @@ function ProcessForm({ employee, exit, onClose }: { employee: BaseRecord; exit: 
     e.preventDefault();
     setSaving(true);
     try {
-      await updateDoc(doc(db(), "exits", employee.id), {
+      await loggedUpdate(doc(db(), "exits", employee.id), {
         status: "processing",
         noticePeriodDays: notice,
         lastWorkingDay: lastDay,

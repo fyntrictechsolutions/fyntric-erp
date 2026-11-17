@@ -1,4 +1,4 @@
-import { BarChart3, LayoutDashboard, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
+import { BarChart3, History, LayoutDashboard, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import { MODULES } from "@/config/modules";
 import { canRead, INTERNAL_ROLES, type ModuleKey, type Role } from "@/config/roles";
 
@@ -43,6 +43,7 @@ export const NAVIGATION: NavSection[] = [
     title: "Admin",
     items: [
       { label: "Users & roles", href: "/admin/users", icon: ShieldCheck, module: "users" },
+      { label: "Activity log", href: "/admin/logs", icon: History, module: "logs" },
       { label: "Settings", href: "/settings", icon: Settings, module: "settings" },
     ],
   },

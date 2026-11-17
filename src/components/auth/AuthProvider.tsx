@@ -2,6 +2,7 @@
 
 import { onAuthStateChanged, signOut as firebaseSignOut, type User } from "firebase/auth";
 import { deleteDoc, doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import { endSession, logEvent, logSessionStart, setAuditActor } from "@/lib/audit";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { db, firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import type { UserProfile } from "@/types";
@@ -90,8 +91,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   }, [user]);
 
+  // The activity log reads who is signed in from here, and records the sign-in once the profile is known.
+  useEffect(() => {
+    setAuditActor(profile);
+    if (profile) logSessionStart();
+  }, [profile]);
+
   const value = useMemo<AuthState>(
-    () => ({ loading, user, profile, signOut: () => firebaseSignOut(firebaseAuth()) }),
+    () => ({
+      loading,
+      user,
+      profile,
+      signOut: async () => {
+        await logEvent({ action: "logout" });
+        endSession();
+        await firebaseSignOut(firebaseAuth());
+      },
+    }),
     [loading, user, profile],
   );
 
