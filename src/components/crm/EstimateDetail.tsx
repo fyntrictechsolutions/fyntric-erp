@@ -176,6 +176,7 @@ function EstimateSheet({ est, lead }: { est: BaseRecord; lead: BaseRecord | null
           <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">Prepared for</p>
           <p className="mt-1 font-medium text-slate-900">{String(lead?.name ?? est.leadIdLabel ?? "—")}</p>
           {Boolean(lead?.company) && <p className="text-sm text-slate-600">{String(lead!.company)}</p>}
+          {Boolean(lead?.address) && <p className="max-w-xs text-sm whitespace-pre-line text-slate-600">{String(lead!.address)}</p>}
           {Boolean(lead?.phone) && <p className="text-sm text-slate-600">{String(lead!.phone)}</p>}
           {Boolean(lead?.email) && <p className="text-sm text-slate-600">{String(lead!.email)}</p>}
         </div>

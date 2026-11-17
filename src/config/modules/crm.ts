@@ -30,13 +30,14 @@ export const leadsModule: ModuleDefinition = {
     );
   },
   statusField: "stage",
-  searchFields: ["name", "company", "email", "phone", "service"],
+  searchFields: ["name", "company", "email", "phone", "address", "service"],
   columns: ["name", "company", "phone", "service", "estimatedValue", "stage"],
   fields: [
     { name: "name", label: "Contact name", type: "text", required: true },
     { name: "company", label: "Company", type: "text" },
     { name: "email", label: "Email", type: "email" },
     { name: "phone", label: "Phone / WhatsApp", type: "tel" },
+    { name: "address", label: "Address", type: "textarea", wide: true },
     { name: "source", label: "Source", type: "select", list: "leadSources" },
     { name: "service", label: "Service interested in", type: "select", list: "services" },
     { name: "estimatedValue", label: "Estimated value", type: "currency" },
