@@ -83,6 +83,17 @@ Run the deploy again whenever `firestore.rules` changes.
 
 For a **client** login, create the client company under Sales > Clients first, then pick that company when you give the user the Client role.
 
+### 5. File storage for the gallery (Cloudinary, free)
+
+Sales > Gallery keeps photos, PDFs, videos and audio on Cloudinary's free plan (25 credits a month, roughly 25 GB of storage and delivery together). The secret key stays on the server; the browser gets a one-time signature for each upload.
+
+1. Sign up at <https://cloudinary.com/users/register_free>.
+2. In the Cloudinary console, open **Settings > API Keys** and copy the cloud name, API key and API secret.
+3. In Vercel, add `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` (Production and Preview), then redeploy.
+4. In Cloudinary **Settings > Security**, turn on **Allow delivery of PDF and ZIP files**, or PDFs won't open from their links.
+
+Each file is either **public** (a plain link anyone can open, for sharing with clients) or **private** (only opened inside the app, through a link the server signs). A file can be switched later; its old link stops working. Free-plan limits per file: 10 MB for images, PDFs and documents, 100 MB for video and audio.
+
 ## Local development
 
 ```bash
@@ -119,4 +130,4 @@ npm run test:rules   # starts the emulators and runs the permission tests
 ## Free tier limits worth knowing
 
 Firestore Spark allows 50,000 reads, 20,000 writes and 1 GiB storage per day/total, which is plenty for a team of this size. Lists load each module's records live, so if a collection grows into many thousands of records, add pagination before it starts eating into the read quota.
-Firebase Storage needs the paid Blaze plan, so the few uploads the app has (candidate certificates, signed offer letters) are stored as data in the `files` collection, up to 0.7 MB each.
+Firebase Storage needs the paid Blaze plan, so the few uploads the app has (candidate certificates, signed offer letters) are stored as data in the `files` collection, up to 0.7 MB each. The gallery uses Cloudinary instead (see setup step 5).

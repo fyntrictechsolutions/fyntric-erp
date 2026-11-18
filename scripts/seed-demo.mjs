@@ -253,5 +253,24 @@ for (const [emp, parts] of salaries) {
 // One resignation in progress.
 await db.doc("exits/emp5").set({ employeeId: "emp5", employeeName: "Kiran Thomas", status: "requested", receivedOn: iso(-3), requestedLastDay: iso(27), reason: "Moving to Bengaluru for family reasons.", userId: uid.hr_manager, userName: "Rahul Nair", createdAt: now, updatedAt: now });
 
+// Sales gallery. Files point at Cloudinary's public "demo" cloud, so thumbnails show without your own account.
+const galleryFiles = [
+  ["Homepage design", "prd0", "image", "image/jpeg", "image", "sample", "jpg", 109669, "public", ["design", "homepage"], { width: 864, height: 576 }],
+  ["Product page mockup", "prd1", "image", "image/jpeg", "image", "samples/ecommerce/leather-bag-gray", "jpg", 245000, "public", ["mockup"], { width: 1200, height: 800 }],
+  ["Checkout flow", "prd1", "image", "image/jpeg", "image", "samples/ecommerce/shoes", "jpg", 198000, "private", ["mockup", "checkout"], { width: 1200, height: 800 }],
+  ["App walkthrough", "prd2", "video", "video/mp4", "video", "dog", "mp4", 9_800_000, "public", ["demo"], { width: 1280, height: 720, duration: 13 }],
+  ["App screens", "prd2", "image", "image/jpeg", "image", "samples/people/smiling-man", "jpg", 310000, "public", [], { width: 1000, height: 1000 }],
+  ["Maintenance plan brochure", "prd3", "pdf", "application/pdf", "image", "multi_page_pdf", "pdf", 1_400_000, "public", ["brochure"], { pages: 4 }],
+  ["Client call recording", "prd5", "audio", "audio/mpeg", "video", "dog", "mp3", 2_100_000, "private", ["call"], { duration: 13 }],
+  ["Company profile", null, "image", "image/jpeg", "image", "samples/landscapes/beach-boat", "jpg", 420000, "public", ["profile"], { width: 1400, height: 933 }],
+];
+for (const [i, [name, productId, kind, mime, resourceType, publicId, format, size, visibility, tags, meta]] of galleryFiles.entries()) {
+  await db.doc(`gallery/gal${i}`).set(stamp("sales", {
+    employeeId: null, gallery: "sales", name, description: "", tags, productId, productIdLabel: productId ? products[Number(productId.slice(3))][0] : null,
+    kind, mime, size, width: null, height: null, duration: null, pages: null, ...meta, visibility, provider: "cloudinary", cloudName: "demo",
+    publicId, resourceType, format, fileName: `${publicId.split("/").pop()}.${format}`, createdAt: now - i * 86_400_000, updatedAt: now - i * 86_400_000,
+  }));
+}
+
 console.log("Demo data ready. Sign in with e.g. admin@fyntric.test / fyntric123");
 process.exit(0);

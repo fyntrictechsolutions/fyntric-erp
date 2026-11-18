@@ -274,6 +274,23 @@ describe("module access by role", () => {
     assert.equal(await allowed(addDoc(collection(users.staff.db, "products"), { name: "Site", userId: users.staff.uid })), false);
     assert.equal(await allowed(getDocs(collection(users.client.db, "products"))), false);
   });
+  test("sales gallery: internal, investor and viewer read; sales and admin add, edit and delete", async () => {
+    const entry = (role) => ({ gallery: "sales", name: "Brochure", visibility: "public", userId: users[role].uid });
+    const salesQuery = (role) => query(collection(users[role].db, "gallery"), where("gallery", "==", "sales"));
+    assert.equal(await allowed(addDoc(collection(users.sales.db, "gallery"), entry("sales"))), true);
+    assert.equal(await allowed(addDoc(collection(users.staff.db, "gallery"), entry("staff"))), false);
+    assert.equal(await allowed(addDoc(collection(users.sales.db, "gallery"), { ...entry("sales"), gallery: "hr" })), false);
+    for (const role of ["staff", "investor", "viewer", "project_manager"]) assert.equal(await allowed(getDocs(salesQuery(role))), true, role);
+    assert.equal(await allowed(getDocs(salesQuery("client"))), false);
+    // Lists must ask for one gallery.
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "gallery"))), false);
+    const ref = await addDoc(collection(users.sales.db, "gallery"), entry("sales"));
+    assert.equal(await allowed(updateDoc(doc(users.admin.db, "gallery", ref.id), { name: "Renamed", visibility: "private" })), true);
+    assert.equal(await allowed(updateDoc(doc(users.staff.db, "gallery", ref.id), { name: "Mine" })), false);
+    assert.equal(await allowed(updateDoc(doc(users.sales.db, "gallery", ref.id), { userId: users.staff.uid })), false);
+    assert.equal(await allowed(deleteDoc(doc(users.viewer.db, "gallery", ref.id))), false);
+    assert.equal(await allowed(deleteDoc(doc(users.sales.db, "gallery", ref.id))), true);
+  });
   test("purchases and suppliers: admin only writes; investor reads; sales nothing", async () => {
     assert.equal(await allowed(addDoc(collection(users.admin.db, "suppliers"), { name: "S", userId: users.admin.uid })), true);
     assert.equal(await allowed(getDocs(collection(users.investor.db, "purchases"))), true);
