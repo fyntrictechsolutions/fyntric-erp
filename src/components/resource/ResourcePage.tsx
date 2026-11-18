@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { inputClasses } from "@/components/ui/fieldStyles";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Spinner } from "@/components/ui/Spinner";
-import type { ModuleDefinition, RecordAction } from "@/config/modules";
+import type { FieldDefinition, ModuleDefinition, RecordAction } from "@/config/modules";
 import type { Role } from "@/config/roles";
 import { useModuleRecords } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
@@ -52,8 +52,12 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
   const statusField = module.fields.find((f) => f.name === module.statusField);
   const statusOptions = statusField ? optionsFor(statusField, settings) : [];
   const columns = module.columns
-    .map((name) => module.fields.find((f) => f.name === name)!)
-    .filter((f) => f && !f.hiddenFor?.includes(role));
+    .map((c): Column | null => {
+      const group = typeof c === "string" ? { label: "", fields: [c] } : c;
+      const fields = group.fields.map((n) => module.fields.find((f) => f.name === n)).filter((f): f is FieldDefinition => Boolean(f) && !f!.hiddenFor?.includes(role));
+      return fields.length ? { key: group.fields.join("+"), label: group.label || fields[0].label, fields, prefixes: typeof c === "string" ? undefined : c.prefixes } : null;
+    })
+    .filter((c): c is Column => c !== null);
   const showOwner = Boolean(module.ownerLabel && access.seesEveryone);
 
   const rows = useMemo(() => {
@@ -165,7 +169,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
                   <tr>
                     {showOwner && <th className="px-4 py-3 font-medium">{module.ownerLabel}</th>}
                     {columns.map((c) => (
-                      <th key={c.name} className="px-4 py-3 font-medium whitespace-nowrap">{c.label}</th>
+                      <th key={c.key} className="px-4 py-3 font-medium whitespace-nowrap">{c.label}</th>
                     ))}
                     <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
@@ -175,14 +179,8 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
                     <tr key={r.id} {...rowProps(r)} className={cn("text-body transition-colors hover:bg-tint", rowProps(r).className)}>
                       {showOwner && <td className="px-4 py-3 font-medium text-foreground">{r.userName ?? "—"}</td>}
                       {columns.map((c, i) => (
-                        <td key={c.name} className={cn("max-w-xs px-4 py-3", i === 0 && !showOwner && "font-medium text-foreground")}>
-                          {i === 0 && module.detailHref ? (
-                            <Link href={module.detailHref(r.id)} onClick={(e) => e.stopPropagation()} className="hover:text-accent hover:underline">
-                              <FieldValue field={c} record={r} />
-                            </Link>
-                          ) : (
-                            <FieldValue field={c} record={r} />
-                          )}
+                        <td key={c.key} className={cn("max-w-xs px-4 py-3", i === 0 && !showOwner && "font-medium text-foreground")}>
+                          <ColumnCell column={c} record={r} href={i === 0 && module.detailHref ? module.detailHref(r.id) : undefined} />
                         </td>
                       ))}
                       <td className="px-4 py-3">
@@ -205,12 +203,12 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
               {rows.map((r) => (
                 <li key={r.id} {...rowProps(r)} className={cn("space-y-2 p-4", rowProps(r).className)}>
                   {showOwner && <p className="text-xs font-medium text-muted">{module.ownerLabel}: {r.userName ?? "—"}</p>}
-                  <div className="font-medium text-foreground"><FieldValue field={columns[0]} record={r} /></div>
+                  <div className="font-medium text-foreground"><ColumnCell column={columns[0]} record={r} /></div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                     {columns.slice(1).map((c) => (
-                      <div key={c.name} className="min-w-0">
+                      <div key={c.key} className="min-w-0">
                         <dt className="text-xs text-subtle">{c.label}</dt>
-                        <dd className="truncate"><FieldValue field={c} record={r} /></dd>
+                        <dd className="truncate"><ColumnCell column={c} record={r} /></dd>
                       </div>
                     ))}
                   </dl>
@@ -290,6 +288,51 @@ export function RowActions({
         </Button>
       )}
       {showChevron && <ChevronRight className="size-4 text-subtle" aria-hidden />}
+    </div>
+  );
+}
+
+interface Column {
+  key: string;
+  label: string;
+  fields: FieldDefinition[];
+  prefixes?: Record<string, string>;
+}
+
+const isEmpty = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
+/** "EST-202611-3004" → "EST-…3004": keeps the start and the distinguishing end. */
+function shorten(text: string) {
+  return text.length > 10 ? `${text.slice(0, 4)}…${text.slice(-4)}` : text;
+}
+
+/** One table cell: a single field, or several stacked (empty ones skipped). */
+function ColumnCell({ column, record, href }: { column: Column; record: BaseRecord; href?: string }) {
+  const [first, ...rest] = column.fields;
+  const value = (f: FieldDefinition) =>
+    f.shortenMiddle && typeof record[f.name] === "string" ? (
+      <span title={String(record[f.name])} className="whitespace-nowrap">{shorten(String(record[f.name]))}</span>
+    ) : (
+      <FieldValue field={f} record={record} />
+    );
+  const main = href ? (
+    <Link href={href} onClick={(e) => e.stopPropagation()} className="hover:text-accent hover:underline">
+      {value(first)}
+    </Link>
+  ) : (
+    value(first)
+  );
+  const extra = rest.filter((f) => !isEmpty(record[f.name]) && !(f.type === "reference" && isEmpty(record[`${f.name}Label`])));
+  if (!extra.length) return main;
+  return (
+    <div className="min-w-0">
+      <div>{main}</div>
+      {extra.map((f) => (
+        <div key={f.name} className="mt-0.5 text-xs font-normal text-muted">
+          {column.prefixes?.[f.name]}
+          {value(f)}
+        </div>
+      ))}
     </div>
   );
 }

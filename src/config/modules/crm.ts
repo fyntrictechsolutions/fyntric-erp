@@ -33,7 +33,7 @@ export const leadsModule: ModuleDefinition = {
   },
   statusField: "stage",
   searchFields: ["name", "company", "email", "phone", "address", "service"],
-  columns: ["name", "company", "phone", "service", "estimatedValue", "stage"],
+  columns: [{ label: "Lead", fields: ["name", "company", "phone"] }, "service", "estimatedValue", "stage"],
   fields: [
     { name: "name", label: "Contact name", type: "text", required: true },
     { name: "company", label: "Company", type: "text" },
