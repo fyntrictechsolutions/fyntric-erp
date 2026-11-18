@@ -8,7 +8,7 @@ import { candidatesModule } from "./hiring";
 import { estimatesModule, followupsModule, productsModule } from "./sales";
 import type { ModuleDefinition } from "./types";
 
-export type { Billing, FieldDefinition, FormContext, LineItem, ModuleDefinition, RecordAction, SelectOption } from "./types";
+export type { Billing, ColumnGroup, FieldDefinition, FormContext, LineItem, ModuleDefinition, RecordAction, SelectOption } from "./types";
 
 /** Every data module, keyed by module key. Reports, settings and users are pages, not modules. */
 export const MODULES: Partial<Record<ModuleKey, ModuleDefinition>> = {

@@ -58,6 +58,8 @@ export interface FieldDefinition {
   display?: "progress" | "billingGroups";
   /** Select fields: only these values can be picked in the form (others still show as badges, e.g. statuses set automatically). */
   formValues?: string[];
+  /** In tables, long values keep their start and end with "…" in the middle (full value on hover). */
+  shortenMiddle?: boolean;
   min?: number;
   max?: number;
   /** Takes the full row in the two-column form. */
@@ -105,6 +107,14 @@ export interface RecordAction {
   confirm?: string;
 }
 
+/** Several fields stacked in one table column: the first on top, the rest smaller underneath. */
+export interface ColumnGroup {
+  label: string;
+  fields: string[];
+  /** Text shown before a field's value on its line, e.g. { taxRate: "+ GST " }. */
+  prefixes?: Record<string, string>;
+}
+
 export interface ModuleDefinition {
   key: ModuleKey;
   /** Plural name, used for the page title and menu. */
@@ -116,7 +126,7 @@ export interface ModuleDefinition {
   href: string;
   fields: FieldDefinition[];
   /** Field names shown as table columns, in order. */
-  columns: string[];
+  columns: (string | ColumnGroup)[];
   /** Fields matched by the search box. */
   searchFields: string[];
   /** Select field used for the status filter chips. */
@@ -142,4 +152,6 @@ export interface ModuleDefinition {
   afterCreate?: (id: string, data: Record<string, unknown>, ctx: ActionContext) => Promise<void>;
   /** Runs after a record is created, edited or deleted (e.g. update an invoice's paid amount). */
   afterChange?: (data: Record<string, unknown>, ctx: ActionContext) => Promise<void>;
+  /** Runs after a record is deleted (e.g. remove a lead's follow-ups). */
+  afterDelete?: (record: BaseRecord, ctx: ActionContext) => Promise<void>;
 }

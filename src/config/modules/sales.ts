@@ -44,7 +44,7 @@ export const productsModule: ModuleDefinition = {
   href: "/crm/products",
   statusField: "status",
   searchFields: ["name", "category", "code", "description"],
-  columns: ["name", "kind", "category", "price", "billingCycle", "taxRate", "status"],
+  columns: [{ label: "Product / service", fields: ["name", "kind", "category"] }, { label: "Price", fields: ["price", "taxRate"], prefixes: { taxRate: "+ GST " } }, "billingCycle", "status"],
   fields: [
     { name: "name", label: "Name", type: "text", required: true, placeholder: "e.g. Business website (up to 8 pages)" },
     {
@@ -94,7 +94,7 @@ export const estimatesModule: ModuleDefinition = {
   fields: [
     { name: "leadId", label: "Lead", type: "reference", required: true, reference: { module: "leads", labelField: "name" } },
     { name: "title", label: "Title", type: "text", placeholder: "e.g. Website redesign" },
-    { name: "estimateNumber", label: "Estimate number", type: "text", help: "Leave blank to generate one." },
+    { name: "estimateNumber", label: "Estimate no.", type: "text", shortenMiddle: true, help: "Leave blank to generate one." },
     { name: "issueDate", label: "Date", type: "date", required: true, defaultValue: () => todayISO() },
     { name: "validUntil", label: "Valid until", type: "date", defaultValue: ({ settings }) => addDays(todayISO(), settings.app.estimateValidityDays) },
     { name: "status", label: "Status", type: "select", required: true, defaultValue: "draft", options: ESTIMATE_STATUS },

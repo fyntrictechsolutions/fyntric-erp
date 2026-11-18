@@ -1,12 +1,14 @@
 "use client";
 
-import { CalendarClock, FileSignature, MessageCircle, Pencil, Phone, Plus } from "lucide-react";
+import { CalendarClock, FileSignature, Handshake, MessageCircle, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound, RecordFields, WithRecordId } from "@/components/common/DetailShell";
 import { NoAccess } from "@/components/resource/ModulePage";
-import { RecordEditor } from "@/components/resource/RecordEditor";
+import { friendlyError, RecordEditor } from "@/components/resource/RecordEditor";
+import { useSettings } from "@/components/settings/SettingsProvider";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -17,6 +19,7 @@ import { ESTIMATE_STATUS, estimatesModule, FOLLOWUP_STATUS, followupsModule } fr
 import { canRead } from "@/config/roles";
 import { useRecord, useRecordsWhere } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
+import { deleteRecord } from "@/lib/records";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 
@@ -52,6 +55,10 @@ function LeadDetail({ id }: { id: string }) {
   const followups = useRecordsWhere("followups", "leadId", id);
   const estimates = useRecordsWhere("estimates", "leadId", id);
   const [editing, setEditing] = useState<Editing>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const settings = useSettings();
+  const router = useRouter();
   const sorted = useMemo(() => sortFollowups(followups.data), [followups.data]);
 
   if (loading) return <Loading />;
@@ -63,6 +70,37 @@ function LeadDetail({ id }: { id: string }) {
   const stage = leadsModule.fields.find((f) => f.name === "stage")!.options!.find((o) => o.value === lead.stage);
   const wa = whatsappLink(lead.phone);
   const close = () => setEditing(null);
+  const convert = leadsModule.actions?.find((a) => a.label === "Convert to client");
+  const canConvert = Boolean(convert && convert.when(lead) && leadAccess.isManager);
+
+  const doConvert = async () => {
+    if (!convert?.run || (convert.confirm && !window.confirm(convert.confirm))) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await convert.run(lead, { profile, settings });
+    } catch (e) {
+      setMessage(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    const extra = followups.data.length ? ` Its ${followups.data.length} follow-up${followups.data.length === 1 ? "" : "s"} will be deleted too.` : "";
+    const keep = estimates.data.length ? " Estimates made for it are kept." : "";
+    if (!window.confirm(`Delete the lead "${String(lead.name ?? "")}"?${extra}${keep} This can't be undone.`)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await deleteRecord("leads", lead.id);
+      await leadsModule.afterDelete?.(lead, { profile, settings });
+      router.push("/crm/leads");
+    } catch (e) {
+      setMessage(friendlyError(e));
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="animate-fade-up">
@@ -83,6 +121,16 @@ function LeadDetail({ id }: { id: string }) {
                 <MessageCircle className="size-4" /> WhatsApp
               </a>
             )}
+            {canConvert && (
+              <Button variant="secondary" onClick={() => void doConvert()} disabled={busy}>
+                <Handshake className="size-4" /> Convert to client
+              </Button>
+            )}
+            {leadAccess.canDelete(lead) && (
+              <Button variant="danger" onClick={() => void doDelete()} disabled={busy}>
+                <Trash2 className="size-4" /> Delete
+              </Button>
+            )}
             {leadAccess.canEdit(lead) && (
               <Button onClick={() => setEditing({ kind: "lead" })}>
                 <Pencil className="size-4" /> Edit lead
@@ -92,6 +140,12 @@ function LeadDetail({ id }: { id: string }) {
         }
       />
 
+      {message && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">{message}</p>}
+      {Boolean(lead.clientId) && (
+        <p className="mb-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
+          Converted to client <Link href="/crm/clients" className="font-medium underline">{String(lead.clientIdLabel ?? "")}</Link>.
+        </p>
+      )}
       <Card className="p-5 sm:p-6">
         <h2 className="mb-4 font-display text-base font-semibold text-foreground">Basic details</h2>
         <RecordFields module={leadsModule} record={lead} role={profile.role} />
