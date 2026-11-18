@@ -42,7 +42,7 @@ const ACTIONS: Record<LogAction, { label: string; tone: Tone }> = {
 };
 
 /** Collections written outside the module list, named for people. */
-const EXTRA_NAMES: Record<string, string> = { files: "Files", invites: "Invitations", settings: "Settings", users: "Users", salaries: "Salary structure", exits: "Resignations" };
+const EXTRA_NAMES: Record<string, string> = { gallery: "Gallery", files: "Files", invites: "Invitations", settings: "Settings", users: "Users", salaries: "Salary structure", exits: "Resignations" };
 
 const moduleName = (m: string | null) => (m ? (MODULE_LABELS[m as ModuleKey] ?? EXTRA_NAMES[m] ?? m) : "");
 
@@ -51,6 +51,7 @@ function recordHref(e: LogEntry): string | null {
   if (!e.module || !e.recordId || e.action === "delete") return null;
   if (e.module === "salaries" || e.module === "exits") return `/hr/employees/view?id=${e.recordId}`;
   if (e.module === "settings") return "/settings";
+  if (e.module === "gallery") return `/crm/gallery?file=${e.recordId}`;
   if (e.module === "users" || e.module === "invites") return "/admin/users";
   const def = MODULES[e.module as ModuleKey];
   return def?.detailHref ? def.detailHref(e.recordId) : def ? def.href : null;

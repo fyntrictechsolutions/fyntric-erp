@@ -26,6 +26,7 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 | Estimates | Full | View | – | Full | – | – | View | View |
 | Clients | Full | View | – | Full | – | – | View | View |
 | Products & services | Full | View | View | Full | View | – | View | View |
+| Sales gallery | Full | View | View | Full | View | – | View | View |
 | Projects | Full | Full | View | View | View | Linked | View | View |
 | Timesheets | Full | Full | Own | Own | Own | – | – | – |
 | Suppliers, purchase bills | Full | – | – | – | – | – | View | View |

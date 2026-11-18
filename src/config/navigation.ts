@@ -1,4 +1,4 @@
-import { BarChart3, History, LayoutDashboard, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
+import { BarChart3, History, Images, LayoutDashboard, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import { MODULES } from "@/config/modules";
 import { canRead, INTERNAL_ROLES, type ModuleKey, type Role } from "@/config/roles";
 
@@ -34,7 +34,7 @@ export const NAVIGATION: NavSection[] = [
       moduleItem("candidates"),
     ],
   },
-  { title: "Sales", items: [moduleItem("leads"), moduleItem("estimates"), moduleItem("clients"), moduleItem("products")] },
+  { title: "Sales", items: [moduleItem("leads"), moduleItem("estimates"), moduleItem("clients"), moduleItem("products"), { label: "Gallery", href: "/crm/gallery", icon: Images, module: "salesGallery" }] },
   { title: "Delivery", items: [moduleItem("projects"), moduleItem("timesheets")] },
   { title: "Purchases", items: [moduleItem("purchases"), moduleItem("suppliers")] },
   { title: "Finance", items: [moduleItem("invoices"), moduleItem("payments"), moduleItem("expenses")] },

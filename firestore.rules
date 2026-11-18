@@ -221,6 +221,16 @@ service cloud.firestore {
       allow delete: if hasRole(['admin', 'sales']);
     }
 
+    // Galleries: one collection for every gallery, told apart by `gallery` ("sales" for now).
+    // The files themselves are on Cloudinary; this is their list, names and product links.
+    match /gallery/{id} {
+      allow read: if resource.data.gallery == 'sales' && (internal() || hasRole(['investor', 'viewer']));
+      allow create: if request.resource.data.gallery == 'sales' && hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if resource.data.gallery == 'sales' && request.resource.data.gallery == 'sales'
+        && hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if resource.data.gallery == 'sales' && hasRole(['admin', 'sales']);
+    }
+
     match /products/{id} {
       allow read: if internal() || hasRole(['investor', 'viewer']);
       allow create: if hasRole(['admin', 'sales']) && createsOwn();

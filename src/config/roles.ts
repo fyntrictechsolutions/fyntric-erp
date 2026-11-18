@@ -63,6 +63,7 @@ export type ModuleKey =
   | "estimates"
   | "clients"
   | "products"
+  | "salesGallery"
   | "projects"
   | "timesheets"
   | "suppliers"
@@ -148,6 +149,8 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
   estimates: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
   clients: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
   products: row({ ...staffWide(READ_ALL), sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
+  // Files about products (photos, brochures, demo videos): same people as the price list.
+  salesGallery: row({ ...staffWide(READ_ALL), sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
 
   // Delivery
   projects: row({ ...staffWide(READ_ALL), project_manager: FULL, client: CLIENT_READ, investor: READ_ALL, viewer: READ_ALL }),
@@ -189,6 +192,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   estimates: "Estimates",
   clients: "Clients",
   products: "Products & services",
+  salesGallery: "Sales gallery",
   projects: "Projects",
   timesheets: "Timesheets",
   suppliers: "Suppliers",
