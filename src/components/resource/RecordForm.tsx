@@ -23,6 +23,11 @@ export function initialValues(module: ModuleDefinition, ctx: FormContext, record
   if (record) return { ...record };
   const values: Values = {};
   for (const f of module.fields) {
+    if (f.defaultToMe && ctx.profile) {
+      values[f.name] = ctx.profile.id;
+      values[`${f.name}Label`] = ctx.profile.displayName;
+      continue;
+    }
     if (f.defaultValue === undefined) continue;
     values[f.name] = typeof f.defaultValue === "function" ? f.defaultValue(ctx) : f.defaultValue;
   }

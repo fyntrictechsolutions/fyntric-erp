@@ -34,7 +34,7 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
   const profile = useProfile();
   const settings = useSettings();
   const access = moduleAccess(module, profile);
-  const [values, setValues] = useState(() => initialValues(module, { settings }, record, preset));
+  const [values, setValues] = useState(() => initialValues(module, { settings, profile }, record, preset));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const formId = `form-${module.key}`;
@@ -48,7 +48,7 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
         setMessage(problem);
         return;
       }
-      const stored = toStoredValues(module, values, { settings });
+      const stored = toStoredValues(module, values, { settings, profile });
       let id = record?.id ?? "";
       if (record) {
         await updateRecord(module.key, record.id, stored);

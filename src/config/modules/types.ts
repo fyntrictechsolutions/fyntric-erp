@@ -38,8 +38,14 @@ export interface FieldDefinition {
   options?: SelectOption[];
   /** Options come from an admin-editable list in Settings > Lists instead. */
   list?: ListKey;
-  /** For "reference" fields: which module to pick from and which field to show. The label is saved as `<name>Label`. */
-  reference?: { module: ModuleKey; labelField: string };
+  /**
+   * For "reference" fields: which module to pick from and which field to show. The label is saved as `<name>Label`.
+   * `module: "team"` picks a registered team member (an active user with a staff role); admins see everyone,
+   * others can only pick themselves, since only admins may list user accounts.
+   */
+  reference?: { module: ModuleKey | "team"; labelField: string };
+  /** "team" references: new records start with the person filling in the form. */
+  defaultToMe?: boolean;
   /** Value for new records. Functions run when the form opens. */
   defaultValue?: string | number | boolean | ((ctx: FormContext) => string | number | boolean);
   /** Only people who manage every record (e.g. HR for leave) can set this, like an approval status. */
@@ -85,6 +91,8 @@ export type Billing = "once" | "annually" | "monthly";
 
 export interface FormContext {
   settings: Settings;
+  /** The person filling in the form. */
+  profile?: UserProfile;
 }
 
 export interface ActionContext {
