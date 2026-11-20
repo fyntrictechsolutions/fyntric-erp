@@ -106,8 +106,8 @@ export const expensesModule: ModuleDefinition = {
   href: "/finance/expenses",
   ownerLabel: "Submitted by",
   statusField: "status",
-  searchFields: ["description", "category", "userName", "projectIdLabel"],
-  columns: ["date", "category", "description", "amount", "status"],
+  searchFields: ["description", "category", "userName", "paidByLabel", "projectIdLabel"],
+  columns: ["date", "category", "description", "amount", "paidBy", "status"],
   fields: [
     { name: "date", label: "Date", type: "date", required: true, defaultValue: todayISO },
     {
@@ -119,8 +119,16 @@ export const expensesModule: ModuleDefinition = {
     },
     { name: "amount", label: "Amount", type: "currency", required: true, min: 0 },
     {
-      name: "paymentMode",
+      name: "paidBy",
       label: "Paid by",
+      type: "reference",
+      reference: { module: "team", labelField: "displayName" },
+      defaultToMe: true,
+      help: "The team member who paid. Admins can pick anyone; others record what they paid themselves.",
+    },
+    {
+      name: "paymentMode",
+      label: "Payment mode",
       type: "select",
       defaultValue: "UPI",
       list: "paymentModes",
