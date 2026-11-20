@@ -4,7 +4,7 @@ import { collection, query, where } from "firebase/firestore";
 import { ChevronDown, ChevronRight, CloudOff, Download, Globe, Images, LayoutGrid, List, Lock, MoreVertical, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { NoAccess } from "@/components/resource/ModulePage";
 import { friendlyError } from "@/components/resource/RecordEditor";
@@ -19,12 +19,12 @@ import { Spinner } from "@/components/ui/Spinner";
 import { canRead, permissionFor, type ModuleKey } from "@/config/roles";
 import { useLiveQuery, useModuleRecords } from "@/hooks/useCollection";
 import { cn } from "@/lib/cn";
-import { db } from "@/lib/firebase";
+import { db, isStorageConfigured } from "@/lib/firebase";
 import type { BaseRecord } from "@/types";
 import { formatDate } from "@/lib/format";
-import { deleteGalleryFile, fileUrl, formatBytes, KIND_LABELS, setVisibility, storageConfigured, type FileKind, type GalleryFile, type GalleryKey } from "@/lib/gallery";
+import { deleteGalleryFile, downloadFile, formatBytes, KIND_LABELS, setVisibility, type FileKind, type GalleryFile, type GalleryKey } from "@/lib/gallery";
 import { EditDialog, UploadDialog } from "./dialogs";
-import { KIND_ICONS, menuItem, Popover, ShareMenu, Thumb, useSignatures, VisibilityBadge } from "./parts";
+import { KIND_ICONS, menuItem, Popover, ShareMenu, Thumb, VisibilityBadge } from "./parts";
 import { Preview } from "./Preview";
 
 type Sort = "newest" | "oldest" | "name-asc" | "name-desc" | "size-desc" | "size-asc";
@@ -107,16 +107,9 @@ function GalleryInner({ gallery, module, title, description }: GalleryProps) {
 
   const { data: files, loading, error } = useLiveQuery<GalleryFile>(() => query(collection(db(), "gallery"), where("gallery", "==", gallery)), `gallery:${gallery}:${profile.id}`);
   const { data: products } = useModuleRecords("products", profile);
-  const signatures = useSignatures(gallery, files);
 
-  const [configured, setConfigured] = useState<boolean | null>(null);
-  useEffect(() => {
-    let live = true;
-    storageConfigured().then((ok) => live && setConfigured(ok));
-    return () => {
-      live = false;
-    };
-  }, []);
+  // The storage bucket comes from the Firebase web config; without one, uploads can't work.
+  const configured = isStorageConfigured;
 
   // Filters and view
   const [search, setSearch] = useState("");
@@ -229,7 +222,6 @@ function GalleryInner({ gallery, module, title, description }: GalleryProps) {
     <FileCard
       key={f.id}
       file={f}
-      signatures={signatures}
       canEdit={canEdit}
       page={page}
       businessName={businessName}
@@ -276,7 +268,7 @@ function GalleryInner({ gallery, module, title, description }: GalleryProps) {
             <div className="text-sm">
               <p className="font-medium text-foreground">File storage isn&apos;t connected yet</p>
               <p className="mt-1 text-muted">
-                The gallery keeps files on Cloudinary&apos;s free plan. An admin needs to add the Cloudinary keys (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET) in Vercel and redeploy. The setup guide in the project docs has the steps.
+                The gallery keeps files in Firebase Storage. An admin needs to turn on Storage in the Firebase console and add NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET in Vercel. The setup guide in the project docs has the steps.
               </p>
             </div>
           </div>
@@ -466,8 +458,7 @@ function GalleryInner({ gallery, module, title, description }: GalleryProps) {
                         <FileRow
                           key={f.id}
                           file={f}
-                          signatures={signatures}
-                          canEdit={canEdit}
+                                              canEdit={canEdit}
                           page={page}
                           businessName={businessName}
                           showProduct={grouping === "none"}
@@ -501,8 +492,7 @@ function GalleryInner({ gallery, module, title, description }: GalleryProps) {
           file={openFile}
           index={Math.max(openIndex, 0)}
           count={Math.max(order.length, 1)}
-          signatures={signatures}
-          canEdit={canEdit}
+              canEdit={canEdit}
           page={page}
           businessName={businessName}
           onPrev={() => step(-1)}
@@ -544,7 +534,6 @@ function ProductFilter({ products: list, value, onChange }: { products: BaseReco
 
 interface ItemProps {
   file: GalleryFile;
-  signatures: Record<string, string>;
   canEdit: boolean;
   page: string;
   businessName: string;
@@ -555,10 +544,9 @@ interface ItemProps {
   onMakePublic: () => void;
 }
 
-function MoreMenu({ file, signatures, canEdit, onEdit, onDelete, onMakePublic }: Pick<ItemProps, "file" | "signatures" | "canEdit" | "onEdit" | "onDelete" | "onMakePublic">) {
+function MoreMenu({ file, canEdit, onEdit, onDelete, onMakePublic }: Pick<ItemProps, "file" | "canEdit" | "onEdit" | "onDelete" | "onMakePublic">) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
-  const download = fileUrl(file, "download", signatures);
   const close = useCallback(() => setOpen(false), []);
   return (
     <div ref={setAnchor} className="relative" onClick={(e) => e.stopPropagation()}>
@@ -566,11 +554,9 @@ function MoreMenu({ file, signatures, canEdit, onEdit, onDelete, onMakePublic }:
         <MoreVertical className="size-4" />
       </button>
       <Popover open={open} onClose={close} anchor={anchor} className="w-52">
-        {download && (
-          <a href={download} className={menuItem} target="_blank" rel="noreferrer" onClick={close}>
-            <Download className="size-4 text-muted" /> Download
-          </a>
-        )}
+        <button type="button" className={menuItem} onClick={() => (close(), void downloadFile(file))}>
+          <Download className="size-4 text-muted" /> Download
+        </button>
         {canEdit && (
           <>
             <button type="button" className={menuItem} onClick={() => (close(), onEdit())}>
@@ -609,7 +595,7 @@ function FileCard(p: ItemProps) {
   return (
     <div className="group rounded-xl border border-line bg-surface shadow-card transition-shadow hover:shadow-lg">
       <button type="button" onClick={p.onOpen} className="relative block w-full overflow-hidden rounded-t-xl text-left" aria-label={`Open ${file.name}`}>
-        <Thumb file={file} signatures={p.signatures} className="aspect-[4/3] w-full" />
+        <Thumb file={file} className="aspect-[4/3] w-full" />
         <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-ink-950/70 px-2 py-0.5 text-[11px] font-medium text-white">
           <Icon className="size-3" /> {KIND_LABELS[file.kind]}
         </span>
@@ -641,7 +627,7 @@ function FileRow(p: ItemProps) {
   return (
     <div className="flex items-center gap-3 px-3 py-2 hover:bg-tint">
       <button type="button" onClick={p.onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <Thumb file={file} signatures={p.signatures} className="h-12 w-16 shrink-0 rounded-md" iconClassName="size-5" />
+        <Thumb file={file} className="h-12 w-16 shrink-0 rounded-md" iconClassName="size-5" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
           <span className="block truncate text-xs text-subtle">

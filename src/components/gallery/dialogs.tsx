@@ -205,7 +205,7 @@ export function UploadDialog({
               choose files
             </button>
           </p>
-          <p className="mt-1 text-xs text-subtle">Images, PDFs and documents up to 10 MB. Videos and audio up to 100 MB.</p>
+          <p className="mt-1 text-xs text-subtle">Images, PDFs and documents up to 25 MB. Videos and audio up to 200 MB.</p>
           <input ref={input} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
         </div>
 

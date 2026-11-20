@@ -4,6 +4,7 @@ The matrix lives in two places that must stay in sync:
 
 - `src/config/roles.ts` decides what the **app shows** (menus, buttons, which records are fetched).
 - `firestore.rules` decides what the **database allows**, so nobody can bypass the UI.
+- `storage.rules` does the same for **files in Firebase Storage** (the gallery), reading each person's role from their Firestore profile.
 
 `npm run test:rules` checks the important cases against the emulator.
 
@@ -57,4 +58,5 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 
 1. Edit `PERMISSIONS` in `src/config/roles.ts`.
 2. Make the same change in the matching `match /<collection>/{id}` block of `firestore.rules`.
-3. Run `npm run test:rules`, then deploy the rules with `npx firebase deploy --only firestore:rules`.
+3. For gallery files, change `storage.rules` too.
+4. Run `npm run test:rules`, then deploy the rules with `npx firebase deploy --only firestore:rules,storage` (or paste them in the Firebase console).

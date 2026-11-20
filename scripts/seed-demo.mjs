@@ -4,6 +4,8 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
+import { randomUUID } from "node:crypto";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
@@ -253,22 +255,42 @@ for (const [emp, parts] of salaries) {
 // One resignation in progress.
 await db.doc("exits/emp5").set({ employeeId: "emp5", employeeName: "Kiran Thomas", status: "requested", receivedOn: iso(-3), requestedLastDay: iso(27), reason: "Moving to Bengaluru for family reasons.", userId: uid.hr_manager, userName: "Rahul Nair", createdAt: now, updatedAt: now });
 
-// Sales gallery. Files point at Cloudinary's public "demo" cloud, so thumbnails show without your own account.
+// Sales gallery: small generated pictures in the Storage emulator, so the grid has thumbnails.
+process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= "127.0.0.1:9199";
+const BUCKET = "demo-fyntric.firebasestorage.app";
+const bucket = getStorage(app).bucket(BUCKET);
+const picture = (label, a, b, w = 960, h = 640) => Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 480 320"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="480" height="320" fill="url(#g)"/><circle cx="370" cy="80" r="44" fill="#fff" opacity=".3"/><path d="M0 270 L140 160 L250 235 L340 180 L480 270 L480 320 L0 320Z" fill="#fff" opacity=".3"/><text x="24" y="298" font-family="sans-serif" font-size="22" fill="#fff">${label}</text></svg>`,
+);
+async function put(path, data, contentType) {
+  const token = randomUUID();
+  await bucket.file(path).save(data, { contentType, metadata: { metadata: { firebaseStorageDownloadTokens: token } } });
+  return `http://127.0.0.1:9199/v0/b/${BUCKET}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+}
 const galleryFiles = [
-  ["Homepage design", "prd0", "image", "image/jpeg", "image", "sample", "jpg", 109669, "public", ["design", "homepage"], { width: 864, height: 576 }],
-  ["Product page mockup", "prd1", "image", "image/jpeg", "image", "samples/ecommerce/leather-bag-gray", "jpg", 245000, "public", ["mockup"], { width: 1200, height: 800 }],
-  ["Checkout flow", "prd1", "image", "image/jpeg", "image", "samples/ecommerce/shoes", "jpg", 198000, "private", ["mockup", "checkout"], { width: 1200, height: 800 }],
-  ["App walkthrough", "prd2", "video", "video/mp4", "video", "dog", "mp4", 9_800_000, "public", ["demo"], { width: 1280, height: 720, duration: 13 }],
-  ["App screens", "prd2", "image", "image/jpeg", "image", "samples/people/smiling-man", "jpg", 310000, "public", [], { width: 1000, height: 1000 }],
-  ["Maintenance plan brochure", "prd3", "pdf", "application/pdf", "image", "multi_page_pdf", "pdf", 1_400_000, "public", ["brochure"], { pages: 4 }],
-  ["Client call recording", "prd5", "audio", "audio/mpeg", "video", "dog", "mp3", 2_100_000, "private", ["call"], { duration: 13 }],
-  ["Company profile", null, "image", "image/jpeg", "image", "samples/landscapes/beach-boat", "jpg", 420000, "public", ["profile"], { width: 1400, height: 933 }],
+  ["Homepage design", "prd0", "image", "public", ["design", "homepage"], ["#1677ff", "#8b6cff"], { width: 960, height: 640 }],
+  ["Product page mockup", "prd1", "image", "public", ["mockup"], ["#0b4bb3", "#04051a"], { width: 960, height: 640 }],
+  ["Checkout flow", "prd1", "image", "private", ["mockup", "checkout"], ["#10b981", "#06b6d4"], { width: 960, height: 640 }],
+  ["App walkthrough", "prd2", "video", "public", ["demo"], ["#8b6cff", "#f59e0b"], { width: 1280, height: 720, duration: 13 }],
+  ["App screens", "prd2", "image", "public", [], ["#06b6d4", "#1677ff"], { width: 960, height: 640 }],
+  ["Maintenance plan brochure", "prd3", "pdf", "public", ["brochure"], ["#f8fafc", "#cbd5e1"], { pages: 4 }],
+  ["Client call recording", "prd5", "audio", "private", ["call"], null, { duration: 13 }],
+  ["Company profile", null, "image", "public", ["profile"], ["#10b981", "#04051a"], { width: 960, height: 640 }],
 ];
-for (const [i, [name, productId, kind, mime, resourceType, publicId, format, size, visibility, tags, meta]] of galleryFiles.entries()) {
+const MIME = { image: "image/svg+xml", video: "video/mp4", pdf: "application/pdf", audio: "audio/mpeg" };
+for (const [i, [name, productId, kind, visibility, tags, colors, meta]] of galleryFiles.entries()) {
+  const folder = `gallery/sales/gal${i}`;
+  const fileName = `${name.toLowerCase().replace(/\W+/g, "-")}.${{ image: "svg", video: "mp4", pdf: "pdf", audio: "mp3" }[kind]}`;
+  // Images are the picture itself; other kinds get a picture as their thumbnail (the demo file isn't playable).
+  const thumb = colors ? picture(name, colors[0], colors[1]) : null;
+  const body = kind === "image" ? thumb : Buffer.from(`Demo ${kind} file`);
+  const url = await put(`${folder}/${fileName}`, body, MIME[kind]);
+  const thumbUrl = thumb ? await put(`${folder}/thumb.svg`, thumb, "image/svg+xml") : null;
   await db.doc(`gallery/gal${i}`).set(stamp("sales", {
     employeeId: null, gallery: "sales", name, description: "", tags, productId, productIdLabel: productId ? products[Number(productId.slice(3))][0] : null,
-    kind, mime, size, width: null, height: null, duration: null, pages: null, ...meta, visibility, provider: "cloudinary", cloudName: "demo",
-    publicId, resourceType, format, fileName: `${publicId.split("/").pop()}.${format}`, createdAt: now - i * 86_400_000, updatedAt: now - i * 86_400_000,
+    kind, mime: MIME[kind], size: [109669, 245000, 198000, 9_800_000, 310000, 1_400_000, 2_100_000, 420000][i], width: null, height: null, duration: null, pages: null, ...meta,
+    visibility, provider: "firebase", path: `${folder}/${fileName}`, thumbPath: thumb ? `${folder}/thumb.svg` : null, url, thumbUrl, fileName,
+    createdAt: now - i * 86_400_000, updatedAt: now - i * 86_400_000,
   }));
 }
 

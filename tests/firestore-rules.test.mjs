@@ -7,6 +7,7 @@ import { getAuth as adminAuth } from "firebase-admin/auth";
 import { getFirestore as adminDb } from "firebase-admin/firestore";
 import { deleteApp, initializeApp } from "firebase/app";
 import { connectAuthEmulator, createUserWithEmailAndPassword, getAuth } from "firebase/auth";
+import { connectStorageEmulator, deleteObject, getBytes, getStorage, ref, uploadBytes } from "firebase/storage";
 import {
   addDoc, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs, getFirestore, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
@@ -23,17 +24,19 @@ const users = {};
 const apps = [];
 
 async function signUp(role, email = `${role}-${Date.now()}@test.dev`) {
-  const app = initializeApp({ apiKey: "demo", projectId: PROJECT }, `u-${role}-${Math.random()}`);
+  const app = initializeApp({ apiKey: "demo", projectId: PROJECT, storageBucket: `${PROJECT}.appspot.com` }, `u-${role}-${Math.random()}`);
   apps.push(app);
   const auth = getAuth(app);
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   const db = getFirestore(app);
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  const storage = getStorage(app);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
   const cred = await createUserWithEmailAndPassword(auth, email, "secret123");
-  return { uid: cred.user.uid, db, auth, email };
+  return { uid: cred.user.uid, db, auth, email, storage };
 }
 
-const allowed = (p) => p.then(() => true, (e) => (String(e.code).includes("permission-denied") ? false : Promise.reject(e)));
+const allowed = (p) => p.then(() => true, (e) => (/permission-denied|storage\/unauthorized/.test(String(e.code)) ? false : Promise.reject(e)));
 
 before(async () => {
   for (const role of ROLES) {
@@ -290,6 +293,20 @@ describe("module access by role", () => {
     assert.equal(await allowed(updateDoc(doc(users.sales.db, "gallery", ref.id), { userId: users.staff.uid })), false);
     assert.equal(await allowed(deleteDoc(doc(users.viewer.db, "gallery", ref.id))), false);
     assert.equal(await allowed(deleteDoc(doc(users.sales.db, "gallery", ref.id))), true);
+  });
+  test("sales gallery files in Storage: sales and admin upload and delete; staff, investor and viewer read; clients nothing", async () => {
+    const file = (role, path = "gallery/sales/f1/brochure.pdf") => ref(users[role].storage, path);
+    const pdf = new Uint8Array([37, 80, 68, 70]);
+    assert.equal(await allowed(uploadBytes(file("sales"), pdf, { contentType: "application/pdf" })), true);
+    assert.equal(await allowed(uploadBytes(file("staff", "gallery/sales/f2/x.pdf"), pdf, { contentType: "application/pdf" })), false);
+    assert.equal(await allowed(uploadBytes(file("admin", "elsewhere/x.pdf"), pdf, { contentType: "application/pdf" })), false);
+    for (const role of ["staff", "investor", "viewer", "project_manager"]) assert.equal(await allowed(getBytes(file(role))), true, role);
+    assert.equal(await allowed(getBytes(file("client"))), false);
+    assert.equal(await allowed(getBytes(file("pending"))), false);
+    // Too large for a PDF (over 25 MB).
+    assert.equal(await allowed(uploadBytes(file("sales", "gallery/sales/f3/big.pdf"), new Uint8Array(26 * 1024 * 1024), { contentType: "application/pdf" })), false);
+    assert.equal(await allowed(deleteObject(file("viewer"))), false);
+    assert.equal(await allowed(deleteObject(file("sales"))), true);
   });
   test("purchases and suppliers: admin only writes; investor reads; sales nothing", async () => {
     assert.equal(await allowed(addDoc(collection(users.admin.db, "suppliers"), { name: "S", userId: users.admin.uid })), true);

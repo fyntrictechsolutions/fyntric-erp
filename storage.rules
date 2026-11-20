@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Who may read and write files in Firebase Storage. Roles come from the user's
+// Firestore profile (users/{uid}), the same as firestore.rules. Keep both in sync.
+// Publish in the Firebase console: Storage > Rules. The console asks once to let
+// Storage read Firestore; allow it.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(roles) {
+      return request.auth != null && profile().active == true && profile().role in roles;
+    }
+
+    // Largest file per kind: video and audio up to 200 MB, everything else up to 25 MB.
+    function sizeOk() {
+      return request.resource.size <= 25 * 1024 * 1024
+        || (request.resource.contentType.matches('(video|audio)/.*') && request.resource.size <= 200 * 1024 * 1024);
+    }
+
+    // Sales gallery: gallery/sales/{fileId}/{file name}, plus a thumbnail next to it.
+    match /gallery/sales/{fileId}/{name} {
+      allow read: if hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'staff', 'investor', 'viewer']);
+      allow create, update: if hasRole(['admin', 'sales']) && sizeOk();
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
+    // Nothing else is stored.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
