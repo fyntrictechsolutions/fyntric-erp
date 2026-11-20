@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useSettings, type Settings } from "@/components/settings/SettingsProvider";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
 import type { FieldDefinition, FormContext, ModuleDefinition, SelectOption } from "@/config/modules";
@@ -76,7 +76,23 @@ interface RecordFormProps {
 export function RecordForm({ formId, module, values, onChange, onSubmit, role, isManager, isEditing }: RecordFormProps) {
   const [touched, setTouched] = useState(false);
   const visible = visibleFields(module, values, role, isManager);
-  const set = (patch: Values) => onChange({ ...values, ...patch });
+  // Filling from another record is async, so patches merge into the latest values, not the ones at click time.
+  const latest = useRef(values);
+  useLayoutEffect(() => {
+    latest.current = values;
+  }, [values]);
+  const set = (patch: Values) => {
+    latest.current = { ...latest.current, ...patch };
+    onChange(latest.current);
+  };
+  const [notes, setNotes] = useState<Record<string, { text: string; tone: "info" | "error" }>>({});
+  const note = (name: string, text: string | null, tone: "info" | "error" = "info") =>
+    setNotes((all) => {
+      const next = { ...all };
+      if (text) next[name] = { text, tone };
+      else delete next[name];
+      return next;
+    });
 
   return (
     <form
@@ -114,17 +130,38 @@ export function RecordForm({ formId, module, values, onChange, onSubmit, role, i
                 values={values}
                 disabled={isEditing && !isManager && field.lockedAfterCreate}
                 set={set}
+                note={note}
               />
             </>
           )}
-          {field.help && <p className="mt-1 text-xs text-subtle">{field.help}</p>}
+          {notes[field.name] ? (
+            <p role="status" className={cn("mt-1 text-xs", notes[field.name].tone === "error" ? "text-red-600" : "text-emerald-700 dark:text-emerald-300")}>
+              {notes[field.name].text}
+            </p>
+          ) : (
+            field.help && <p className="mt-1 text-xs text-subtle">{field.help}</p>
+          )}
         </div>
       ))}
     </form>
   );
 }
 
-function FieldInput({ id, field, values, disabled, set }: { id: string; field: FieldDefinition; values: Values; disabled?: boolean; set: (p: Values) => void }) {
+function FieldInput({
+  id,
+  field,
+  values,
+  disabled,
+  set,
+  note,
+}: {
+  id: string;
+  field: FieldDefinition;
+  values: Values;
+  disabled?: boolean;
+  set: (p: Values) => void;
+  note: (name: string, text: string | null, tone?: "info" | "error") => void;
+}) {
   const settings = useSettings();
   const raw = values[field.name];
   const value = raw === null || raw === undefined ? "" : String(raw);
@@ -157,7 +194,19 @@ function FieldInput({ id, field, values, disabled, set }: { id: string; field: F
           value={value}
           label={String(values[`${field.name}Label`] ?? "")}
           disabled={disabled}
-          onChange={(v, label) => set({ [field.name]: v, [`${field.name}Label`]: v ? label : "" })}
+          onChange={async (v, label, picked) => {
+            set({ [field.name]: v, [`${field.name}Label`]: v ? label : "" });
+            note(field.name, null);
+            if (!field.fill || !picked) return;
+            note(field.name, "Filling in the form…");
+            try {
+              const { values: filled, note: text } = await field.fill(picked, values);
+              set(filled);
+              note(field.name, text ?? "Filled in. Check the details before saving.");
+            } catch {
+              note(field.name, "Couldn't fill the form from this record. Fill it in by hand.", "error");
+            }
+          }}
         />
       );
     case "items":

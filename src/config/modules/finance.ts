@@ -5,7 +5,42 @@ import { formatCurrency, todayISO } from "@/lib/format";
 import { recalcPaid } from "@/lib/payments";
 import { discountedTotals } from "@/lib/lineItems";
 import { docNumber } from "./options";
-import type { LineItem, ModuleDefinition, SelectOption } from "./types";
+import type { FieldDefinition, LineItem, ModuleDefinition, SelectOption } from "./types";
+
+/**
+ * Optional first step of a new invoice: pick a saved estimate to copy its items, discount and notes,
+ * and the client the estimate's lead was converted to. Everything can still be edited before saving.
+ */
+const fromEstimate: FieldDefinition = {
+  name: "estimateId",
+  label: "Fill from estimate (optional)",
+  type: "reference",
+  wide: true,
+  reference: {
+    module: "estimates",
+    labelField: "estimateNumber",
+    format: (e) => [e.estimateNumber || "Estimate", e.leadIdLabel, e.title].filter(Boolean).map(String).join(" · "),
+  },
+  help: "Pick a saved estimate to fill in the invoice, then change anything you need. Or leave it blank and fill in every field yourself.",
+  fill: async (estimate) => {
+    const values: Record<string, unknown> = {
+      items: ((estimate.items as LineItem[] | undefined) ?? []).map((it) => ({ ...it })),
+      discount: estimate.discount ?? "",
+      notes: estimate.notes ?? "",
+    };
+    const number = String(estimate.estimateNumber || "the estimate");
+    const leadId = estimate.leadId as string | undefined;
+    const lead = leadId ? await getDoc(doc(db(), "leads", leadId)).catch(() => null) : null;
+    const clientId = lead?.exists() ? (lead.get("clientId") as string | undefined) : undefined;
+    if (clientId) {
+      values.clientId = clientId;
+      values.clientIdLabel = lead!.get("clientIdLabel") ?? "";
+      return { values, note: `Filled in from ${number}. Check the details before saving.` };
+    }
+    const who = String(estimate.leadIdLabel || "This lead");
+    return { values, note: `Filled in from ${number}. ${who} isn't a client yet, so pick the client below (or convert the lead first).` };
+  },
+};
 
 const hasItems = (v: Record<string, unknown>) => Array.isArray(v.items) && v.items.length > 0;
 /** An invoice from before line items: it has an amount but no items. */
@@ -23,6 +58,7 @@ export const invoicesModule: ModuleDefinition = {
   searchFields: ["invoiceNumber", "clientIdLabel", "projectIdLabel"],
   columns: ["invoiceNumber", "clientId", "issueDate", "dueDate", "total", "balance", "status"],
   fields: [
+    fromEstimate,
     { name: "invoiceNumber", label: "Invoice number", type: "text", help: "Leave blank to generate one." },
     { name: "clientId", label: "Client", type: "reference", required: true, reference: { module: "clients", labelField: "name" } },
     { name: "projectId", label: "Project", type: "reference", reference: { module: "projects", labelField: "name" } },
