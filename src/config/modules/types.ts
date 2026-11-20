@@ -43,7 +43,12 @@ export interface FieldDefinition {
    * `module: "team"` picks a registered team member (an active user with a staff role); admins see everyone,
    * others can only pick themselves, since only admins may list user accounts.
    */
-  reference?: { module: ModuleKey | "team"; labelField: string };
+  reference?: { module: ModuleKey | "team"; labelField: string; format?: (record: BaseRecord) => string };
+  /**
+   * "reference" fields: picking a record fills other fields of the form from it (e.g. an invoice from an estimate).
+   * Returns the values to set, and a short note shown under the field. Everything stays editable afterwards.
+   */
+  fill?: (picked: BaseRecord, current: Record<string, unknown>) => Promise<{ values: Record<string, unknown>; note?: string }>;
   /** "team" references: new records start with the person filling in the form. */
   defaultToMe?: boolean;
   /** Value for new records. Functions run when the form opens. */

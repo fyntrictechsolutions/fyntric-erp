@@ -16,7 +16,8 @@ interface Props {
   value: string;
   label: string;
   disabled?: boolean;
-  onChange: (value: string, label: string) => void;
+  /** `picked` is the chosen record (missing when cleared or when the saved choice can't be listed). */
+  onChange: (value: string, label: string, picked?: BaseRecord) => void;
 }
 
 /** Dropdown of records from another module (e.g. pick a client for a project). */
@@ -44,7 +45,7 @@ export function ReferenceSelect({ field, id, value, label, disabled, onChange }:
         : []
     : data;
   const options = rows
-    .map((r) => ({ value: r.id, label: String(r[ref.labelField] || r.email || "Untitled") }))
+    .map((r) => ({ value: r.id, label: ref.format ? ref.format(r) : String(r[ref.labelField] || r.email || "Untitled") }))
     .sort((a, b) => a.label.localeCompare(b.label));
   // Keep the saved choice visible even if it can't be listed (no access or deleted).
   if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: label || "(unavailable)" });
@@ -56,7 +57,7 @@ export function ReferenceSelect({ field, id, value, label, disabled, onChange }:
       value={value}
       required={field.required}
       disabled={disabled || (allowed && loading)}
-      onChange={(e) => onChange(e.target.value, e.target.selectedOptions[0]?.text ?? "")}
+      onChange={(e) => onChange(e.target.value, e.target.selectedOptions[0]?.text ?? "", rows.find((r) => r.id === e.target.value))}
     >
       <option value="">{allowed && loading ? "Loading…" : "Select…"}</option>
       {options.map((o) => (
