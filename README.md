@@ -16,7 +16,7 @@ See [docs/roles-and-permissions.md](docs/roles-and-permissions.md) for exactly w
 ## Stack (all on free tiers)
 
 - **Next.js 16** (App Router) + **TypeScript** + **Tailwind CSS 4**, hosted on **Vercel** (Hobby plan)
-- **Firebase Authentication** (email/password + Google) and **Cloud Firestore** on the free **Spark** plan
+- **Firebase Authentication** (email/password + Google) and **Cloud Firestore** on the free **Spark** plan (the gallery’s file storage needs **Blaze**, see setup step 5)
 - Security is enforced by [`firestore.rules`](firestore.rules), tested against the Firebase emulator
 
 There's no separate backend server: the browser talks to Firestore directly and the rules decide what each role can read or write.
@@ -83,16 +83,23 @@ Run the deploy again whenever `firestore.rules` changes.
 
 For a **client** login, create the client company under Sales > Clients first, then pick that company when you give the user the Client role.
 
-### 5. File storage for the gallery (Cloudinary, free)
+### 5. File storage for the gallery (Firebase Storage, Blaze plan)
 
-Sales > Gallery keeps photos, PDFs, videos and audio on Cloudinary's free plan (25 credits a month, roughly 25 GB of storage and delivery together). The secret key stays on the server; the browser gets a one-time signature for each upload.
+Sales > Gallery keeps photos, PDFs, videos and audio in Firebase Storage, which needs the Blaze (pay-as-you-go) plan. Blaze still includes a no-cost allowance (about 5 GB stored and 100 GB downloaded a month, for buckets in `us-central1`, `us-east1` or `us-west1`); set a budget alert in Google Cloud billing so you hear about any charges.
 
-1. Sign up at <https://cloudinary.com/users/register_free>.
-2. In the Cloudinary console, open **Settings > API Keys** and copy the cloud name, API key and API secret.
-3. In Vercel, add `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` (Production and Preview), then redeploy.
-4. In Cloudinary **Settings > Security**, turn on **Allow delivery of PDF and ZIP files**, or PDFs won't open from their links.
+1. In the Firebase console, open **Storage** (under *Databases and storage*), click **Get started**, choose a US location such as `us-central1` for the no-cost allowance, and start in production mode.
+2. Open **Storage > Rules**, paste the contents of `storage.rules` and publish. When asked to let Storage read Firestore (the rules check each person's role), allow it.
+3. Make sure Vercel has `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` set to the bucket shown in **Project settings > General > Your apps** (for example `fyntric-erp.firebasestorage.app`), then redeploy.
+4. Let the browser read files back, needed for downloads and for making a public file private. In the Google Cloud console, open Cloud Shell (the `>_` button) and run, with your bucket name:
 
-Each file is either **public** (a plain link anyone can open, for sharing with clients) or **private** (only opened inside the app, through a link the server signs). A file can be switched later; its old link stops working. Free-plan limits per file: 10 MB for images, PDFs and documents, 100 MB for video and audio.
+   ```sh
+   echo '[{"origin":["https://fyntric-erp.vercel.app"],"method":["GET"],"maxAgeSeconds":3600}]' > cors.json
+   gcloud storage buckets update gs://fyntric-erp.firebasestorage.app --cors-file=cors.json
+   ```
+
+   Add your custom domain to `origin` too if you use one.
+
+Thumbnails are made in the browser while uploading (a resized photo, a video frame, the first page of a PDF, a waveform for audio) and stored next to each file, so the grid stays light. Each file is either **public** (its link can be shared with clients) or **private** (only shown inside the app). Making a public file private moves it, so the link already shared stops working. Limits per file: 25 MB for images, PDFs and documents, 200 MB for video and audio (also enforced by `storage.rules`).
 
 ## Local development
 
@@ -130,4 +137,4 @@ npm run test:rules   # starts the emulators and runs the permission tests
 ## Free tier limits worth knowing
 
 Firestore Spark allows 50,000 reads, 20,000 writes and 1 GiB storage per day/total, which is plenty for a team of this size. Lists load each module's records live, so if a collection grows into many thousands of records, add pagination before it starts eating into the read quota.
-Firebase Storage needs the paid Blaze plan, so the few uploads the app has (candidate certificates, signed offer letters) are stored as data in the `files` collection, up to 0.7 MB each. The gallery uses Cloudinary instead (see setup step 5).
+Candidate certificates and signed offer letters are stored as data in the `files` collection, up to 0.7 MB each (they were built before the project moved to Blaze). The gallery uses Firebase Storage (see setup step 5).

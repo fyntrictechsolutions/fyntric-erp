@@ -1,12 +1,19 @@
 import { collection, doc } from "firebase/firestore";
-import { loggedAdd, loggedDelete, loggedUpdate } from "@/lib/audit";
-import { db, firebaseAuth } from "@/lib/firebase";
+import { deleteObject, getDownloadURL, ref, uploadBytes, uploadBytesResumable } from "firebase/storage";
+import { loggedDelete, loggedSet, loggedUpdate } from "@/lib/audit";
+import { db, storage } from "@/lib/firebase";
+import { makeThumbnail } from "@/lib/thumbnails";
 import type { BaseRecord, UserProfile } from "@/types";
 
 /**
- * Galleries of files (photos, brochures, demo videos, recordings). The files are on Cloudinary;
- * Firestore's `gallery` collection keeps one entry per file, with its name, product and tags.
- * One collection serves every gallery, told apart by `gallery` ("sales" for now).
+ * Galleries of files (photos, brochures, demo videos, recordings). The files are in Firebase Storage
+ * under gallery/<gallery>/<file id>/; Firestore's `gallery` collection keeps one entry per file, with
+ * its name, product, tags and links. One collection serves every gallery, told apart by `gallery`.
+ *
+ * Public and private: every stored file has a download link with a secret token, which opens for
+ * anyone who has it. Public files offer that link for sharing. Private files are only shown inside
+ * the app (the list itself is visible to signed-in staff only). Making a public file private moves
+ * it to a new place, so the link already shared stops working.
  */
 
 export type GalleryKey = "sales";
@@ -28,11 +35,13 @@ export interface GalleryFile extends BaseRecord {
   duration?: number | null;
   pages?: number | null;
   visibility: Visibility;
-  provider: "cloudinary";
-  cloudName: string;
-  publicId: string;
-  resourceType: "image" | "video" | "raw";
-  format?: string | null;
+  provider: "firebase";
+  /** Storage path of the file and of its thumbnail (if one could be made). */
+  path: string;
+  thumbPath?: string | null;
+  url: string;
+  thumbUrl?: string | null;
+  fileName: string;
 }
 
 export const KIND_LABELS: Record<FileKind, string> = { image: "Image", video: "Video", audio: "Audio", pdf: "PDF", document: "Document" };
@@ -46,13 +55,13 @@ export function kindOf(file: { type: string; name: string }): FileKind {
   return "document";
 }
 
-/** Largest file Cloudinary's free plan takes, per kind. */
+/** Largest file per kind. storage.rules enforces the same limits. */
 export const MAX_BYTES: Record<FileKind, number> = {
-  image: 10_000_000,
-  pdf: 10_000_000,
-  document: 10_000_000,
-  video: 100_000_000,
-  audio: 100_000_000,
+  image: 25 * 1024 * 1024,
+  pdf: 25 * 1024 * 1024,
+  document: 25 * 1024 * 1024,
+  video: 200 * 1024 * 1024,
+  audio: 200 * 1024 * 1024,
 };
 
 export function formatBytes(bytes: unknown): string {
@@ -72,124 +81,32 @@ export function formatDuration(seconds: unknown): string {
 /** The name without its extension, used as the default title. */
 export const baseName = (name: string) => name.replace(/\.[^.]+$/, "") || name;
 
-// ---------- Links ----------
+/** A file name safe to use in a storage path and a download header. */
+const safeName = (name: string) => name.replace(/[^\w.\- ()]+/g, "_").slice(-120) || "file";
 
-export type Variant = "thumb" | "view" | "download";
+/** The link to give people: public files only. */
+export const publicLink = (f: GalleryFile) => (f.visibility === "private" ? null : f.url);
 
-/** Transformation for each kind of preview. Empty means the original file. */
-function transformFor(f: GalleryFile, variant: Variant): { t: string; ext: string | null } {
-  const original = f.resourceType === "raw" || !f.format ? null : f.format;
-  if (variant === "download") return { t: f.resourceType === "raw" ? "" : "fl_attachment", ext: original };
-  if (variant === "view") {
-    if (f.kind === "image") return { t: "c_limit,w_2400,h_2400,q_auto", ext: original };
-    return { t: "", ext: original };
-  }
-  switch (f.kind) {
-    case "image":
-      return { t: "c_fill,w_480,h_360,q_auto", ext: f.format === "gif" ? "jpg" : original };
-    case "pdf":
-      return { t: "pg_1,c_fill,g_north,w_480,h_360,q_auto", ext: "jpg" };
-    case "video":
-      return { t: "so_1,c_fill,w_480,h_360,q_auto", ext: "jpg" };
-    case "audio":
-      return { t: "fl_waveform,co_rgb:3b82f6,b_transparent,w_480,h_140", ext: "png" };
-    default:
-      return { t: "", ext: null };
-  }
-}
-
-/** Whether a kind of file has a picture preview. */
-export const hasThumb = (f: GalleryFile) => f.kind !== "document";
-
-/** The part of the link a private file's signature covers. */
-export function signedPath(f: GalleryFile, variant: Variant) {
-  const { t, ext } = transformFor(f, variant);
-  return `${t ? `${t}/` : ""}${f.publicId}${ext ? `.${ext}` : ""}`;
-}
-
-/**
- * A link to the file. Public files have plain links anyone can open. Private ones need a signature
- * from the server (see `useSignatures`); without one this returns null.
- */
-export function fileUrl(f: GalleryFile, variant: Variant, signatures: Record<string, string> = {}): string | null {
-  const path = signedPath(f, variant);
-  const base = `https://res.cloudinary.com/${f.cloudName}/${f.resourceType}`;
-  if (f.visibility !== "private") return `${base}/upload/${path}`;
-  const sig = signatures[path];
-  return sig ? `${base}/authenticated/${sig}/${path}` : null;
-}
-
-/** The link to give people: the original file, public files only. */
-export const publicLink = (f: GalleryFile) => (f.visibility === "private" ? null : fileUrl(f, "view"));
-
-// ---------- Server calls ----------
-
-async function api<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const user = firebaseAuth().currentUser;
-  if (!user) throw new Error("Please sign in again.");
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` },
-    body: JSON.stringify(body),
-  });
-  const out = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(out.error ?? "Something went wrong. Please try again.");
-  return out;
-}
-
-export async function storageConfigured(): Promise<boolean> {
+/** Saves the file to the device under its original name; falls back to opening it. */
+export async function downloadFile(f: GalleryFile) {
   try {
-    const res = await fetch("/api/gallery/sign", { cache: "no-store" });
-    return res.ok && Boolean(((await res.json()) as { configured?: boolean }).configured);
+    const res = await fetch(f.url);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = f.fileName || f.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   } catch {
-    return false;
+    // Without CORS on the bucket the browser can't fetch it; opening it still lets people save it.
+    window.open(f.url, "_blank", "noopener");
   }
 }
-
-export const fetchSignatures = (gallery: GalleryKey, paths: string[]) =>
-  api<{ signatures: Record<string, string> }>("/api/gallery/urls", { gallery, paths }).then((r) => r.signatures);
 
 // ---------- Upload ----------
-
-interface Signed {
-  folder: string;
-  timestamp: number;
-  type: string;
-  signature: string;
-  apiKey: string;
-  cloudName: string;
-}
-
-interface Uploaded {
-  public_id: string;
-  resource_type: "image" | "video" | "raw";
-  format?: string;
-  bytes: number;
-  width?: number;
-  height?: number;
-  duration?: number;
-  pages?: number;
-}
-
-function sendWithProgress(url: string, form: FormData, onProgress: (fraction: number) => void): Promise<Uploaded> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => {
-      let out: (Uploaded & { error?: { message?: string } }) | null = null;
-      try {
-        out = JSON.parse(xhr.responseText);
-      } catch {
-        /* not JSON */
-      }
-      if (xhr.status >= 200 && xhr.status < 300 && out?.public_id) resolve(out);
-      else reject(new Error(out?.error?.message ?? `Upload failed (${xhr.status}).`));
-    };
-    xhr.onerror = () => reject(new Error("Upload failed. Check the internet connection."));
-    xhr.send(form);
-  });
-}
 
 export interface UploadInput {
   file: File;
@@ -201,21 +118,56 @@ export interface UploadInput {
   description: string;
 }
 
-/** Sends one file to Cloudinary, then adds its gallery entry. */
+function upload(path: string, data: Blob, contentType: string, fileName: string, onProgress?: (fraction: number) => void): Promise<string> {
+  const target = ref(storage(), path);
+  const metadata = { contentType, contentDisposition: `inline; filename="${fileName}"`, cacheControl: "private, max-age=31536000" };
+  if (!onProgress) return uploadBytes(target, data, metadata).then(() => getDownloadURL(target));
+  return new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(target, data, metadata);
+    task.on(
+      "state_changed",
+      (s) => onProgress(s.totalBytes ? s.bytesTransferred / s.totalBytes : 0),
+      (err) => reject(new Error(storageMessage(err))),
+      () => getDownloadURL(target).then(resolve, reject),
+    );
+  });
+}
+
+/** Readable text for Firebase Storage errors. */
+function storageMessage(err: unknown): string {
+  const code = (err as { code?: string })?.code ?? "";
+  if (code === "storage/unauthorized") return "Storage refused the file. It may be too large, or you may not be allowed to add files here.";
+  if (code === "storage/quota-exceeded") return "The storage quota is used up. Ask an admin to check the Firebase plan.";
+  if (code === "storage/retry-limit-exceeded") return "Upload failed. Check the internet connection and try again.";
+  if (code === "storage/bucket-not-found" || code === "storage/no-default-bucket") return "File storage isn't set up yet. An admin needs to turn on Storage in the Firebase console.";
+  return err instanceof Error ? err.message : "Upload failed.";
+}
+
+/** Uploads one file and its thumbnail, then adds its gallery entry. */
 export async function uploadToGallery(gallery: GalleryKey, input: UploadInput, profile: UserProfile, onProgress: (fraction: number) => void) {
   const kind = kindOf(input.file);
   if (input.file.size > MAX_BYTES[kind]) {
     throw new Error(`${input.file.name} is ${formatBytes(input.file.size)}. ${KIND_LABELS[kind]} files can be up to ${formatBytes(MAX_BYTES[kind])}.`);
   }
-  const signed = await api<Signed>("/api/gallery/sign", { gallery, visibility: input.visibility });
-  const form = new FormData();
-  form.append("file", input.file);
-  form.append("api_key", signed.apiKey);
-  form.append("timestamp", String(signed.timestamp));
-  form.append("folder", signed.folder);
-  form.append("type", signed.type);
-  form.append("signature", signed.signature);
-  const up = await sendWithProgress(`https://api.cloudinary.com/v1_1/${signed.cloudName}/auto/upload`, form, onProgress);
+  const entryRef = doc(collection(db(), "gallery"));
+  const folder = `gallery/${gallery}/${entryRef.id}`;
+  const fileName = safeName(input.file.name);
+  const mime = input.file.type || "application/octet-stream";
+
+  // Thumbnail and details (size, length, pages) come from the file itself, in the browser.
+  const info = await makeThumbnail(input.file, kind).catch(() => null);
+  const url = await upload(`${folder}/${fileName}`, input.file, mime, fileName, (f) => onProgress(f * 0.97));
+  let thumbPath: string | null = null;
+  let thumbUrl: string | null = null;
+  if (info?.thumb) {
+    try {
+      thumbPath = `${folder}/thumb.${info.thumb.type === "image/png" ? "png" : "jpg"}`;
+      thumbUrl = await upload(thumbPath, info.thumb, info.thumb.type, "thumbnail");
+    } catch {
+      thumbPath = null;
+    }
+  }
+  onProgress(1);
 
   const now = Date.now();
   const entry: Omit<GalleryFile, "id"> = {
@@ -226,18 +178,18 @@ export async function uploadToGallery(gallery: GalleryKey, input: UploadInput, p
     productId: input.productId,
     productIdLabel: input.productIdLabel,
     kind,
-    mime: input.file.type || "application/octet-stream",
-    size: up.bytes ?? input.file.size,
-    width: up.width ?? null,
-    height: up.height ?? null,
-    duration: up.duration ?? null,
-    pages: up.pages ?? null,
+    mime,
+    size: input.file.size,
+    width: info?.width ?? null,
+    height: info?.height ?? null,
+    duration: info?.duration ?? null,
+    pages: info?.pages ?? null,
     visibility: input.visibility,
-    provider: "cloudinary",
-    cloudName: signed.cloudName,
-    publicId: up.public_id,
-    resourceType: up.resource_type,
-    format: up.format ?? null,
+    provider: "firebase",
+    path: `${folder}/${fileName}`,
+    thumbPath,
+    url,
+    thumbUrl,
     fileName: input.file.name,
     userId: profile.id,
     userName: profile.displayName,
@@ -245,7 +197,8 @@ export async function uploadToGallery(gallery: GalleryKey, input: UploadInput, p
     createdAt: now,
     updatedAt: now,
   };
-  return loggedAdd(collection(db(), "gallery"), entry as Record<string, unknown>);
+  await loggedSet(entryRef, entry as Record<string, unknown>);
+  return entryRef;
 }
 
 // ---------- Changes ----------
@@ -254,14 +207,52 @@ export async function updateGalleryFile(f: GalleryFile, data: Partial<Pick<Galle
   await loggedUpdate(doc(db(), "gallery", f.id), { ...data, updatedAt: Date.now() });
 }
 
-/** Public: anyone with the link can open it. Private: only signed-in team members. The old link stops working. */
+async function copyObject(fromUrl: string, toPath: string, contentType: string, fileName: string) {
+  const res = await fetch(fromUrl).catch(() => null);
+  if (!res?.ok) {
+    throw new Error("Couldn't move the file. An admin needs to allow the app to read from Storage (CORS); see the setup guide.");
+  }
+  return upload(toPath, await res.blob(), contentType, fileName);
+}
+
+/**
+ * Public: the file's link can be shared. Private: the link isn't offered, and when a public file
+ * turns private it moves to a new place so the link people already have stops working.
+ */
 export async function setVisibility(f: GalleryFile, visibility: Visibility) {
   if (f.visibility === visibility) return;
-  await api("/api/gallery/visibility", { gallery: f.gallery, publicId: f.publicId, resourceType: f.resourceType, visibility });
-  await loggedUpdate(doc(db(), "gallery", f.id), { visibility, updatedAt: Date.now() }, visibility === "public" ? "Made public" : "Made private");
+  const entry = doc(db(), "gallery", f.id);
+  if (visibility === "public") {
+    await loggedUpdate(entry, { visibility, updatedAt: Date.now() }, "Made public");
+    return;
+  }
+  const folder = `gallery/${f.gallery}/${f.id}-${Date.now().toString(36)}`;
+  const fileName = f.path.split("/").pop() ?? safeName(f.fileName);
+  const url = await copyObject(f.url, `${folder}/${fileName}`, f.mime, fileName);
+  let thumbPath: string | null = null;
+  let thumbUrl: string | null = null;
+  if (f.thumbUrl && f.thumbPath) {
+    thumbPath = `${folder}/${f.thumbPath.split("/").pop()}`;
+    thumbUrl = await copyObject(f.thumbUrl, thumbPath, f.thumbPath.endsWith(".png") ? "image/png" : "image/jpeg", "thumbnail").catch(() => null);
+    if (!thumbUrl) thumbPath = null;
+  }
+  const oldPaths = [f.path, f.thumbPath];
+  await loggedUpdate(entry, { visibility, path: `${folder}/${fileName}`, url, thumbPath, thumbUrl, updatedAt: Date.now() }, "Made private (old link stopped)");
+  await removeObjects(oldPaths);
+}
+
+async function removeObjects(paths: (string | null | undefined)[]) {
+  await Promise.all(
+    paths.filter((p): p is string => Boolean(p)).map((p) =>
+      deleteObject(ref(storage(), p)).catch((e: { code?: string }) => {
+        // Already gone is fine.
+        if (e?.code !== "storage/object-not-found") throw e;
+      }),
+    ),
+  );
 }
 
 export async function deleteGalleryFile(f: GalleryFile) {
-  await api("/api/gallery/delete", { gallery: f.gallery, publicId: f.publicId, resourceType: f.resourceType, visibility: f.visibility });
+  await removeObjects([f.path, f.thumbPath]);
   await loggedDelete(doc(db(), "gallery", f.id));
 }

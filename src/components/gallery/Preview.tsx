@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Download, Pencil, X } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { formatDate } from "@/lib/format";
-import { fileUrl, formatBytes, formatDuration, KIND_LABELS, type GalleryFile } from "@/lib/gallery";
+import { downloadFile, formatBytes, formatDuration, KIND_LABELS, type GalleryFile } from "@/lib/gallery";
 import { KIND_ICONS, ShareMenu, VisibilityBadge } from "./parts";
 
 const iconButton = "grid size-9 place-items-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white";
@@ -14,7 +14,6 @@ export function Preview({
   file,
   index,
   count,
-  signatures,
   canEdit,
   page,
   businessName,
@@ -27,7 +26,6 @@ export function Preview({
   file: GalleryFile;
   index: number;
   count: number;
-  signatures: Record<string, string>;
   canEdit: boolean;
   page: string;
   businessName: string;
@@ -52,11 +50,10 @@ export function Preview({
     };
   }, [onClose, onPrev, onNext]);
 
-  const view = fileUrl(file, "view", signatures);
-  const download = fileUrl(file, "download", signatures);
+  const view = file.url;
   const Icon = KIND_ICONS[file.kind];
   const details = [
-    KIND_LABELS[file.kind] + (file.format ? ` (${String(file.format).toUpperCase()})` : ""),
+    KIND_LABELS[file.kind] + (/\.(\w{1,5})$/.test(file.fileName ?? "") ? ` (${file.fileName.split(".").pop()!.toUpperCase()})` : ""),
     formatBytes(file.size),
     file.width && file.height ? `${file.width} × ${file.height}` : null,
     file.duration ? formatDuration(file.duration) : null,
@@ -84,11 +81,9 @@ export function Preview({
         <Icon className="mx-auto size-12 text-white/60" />
         <p className="mt-3 font-medium text-white">{file.name}</p>
         <p className="mt-1 text-sm text-white/60">This file can&apos;t be previewed. Download it to open.</p>
-        {download && (
-          <a href={download} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-medium text-ink-950" target="_blank" rel="noreferrer">
-            <Download className="size-4" /> Download
-          </a>
-        )}
+        <button type="button" onClick={() => downloadFile(file)} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-medium text-ink-950">
+          <Download className="size-4" /> Download
+        </button>
       </div>
     );
 
@@ -104,11 +99,9 @@ export function Preview({
         </div>
         <VisibilityBadge file={file} className="hidden sm:inline-flex" />
         <ShareMenu file={file} page={page} canEdit={canEdit} onMakePublic={onMakePublic} businessName={businessName} buttonClassName={iconButton} />
-        {download && (
-          <a href={download} className={iconButton} aria-label="Download" title="Download" target="_blank" rel="noreferrer">
-            <Download className="size-4" />
-          </a>
-        )}
+        <button type="button" onClick={() => downloadFile(file)} className={iconButton} aria-label="Download" title="Download">
+          <Download className="size-4" />
+        </button>
         {canEdit && (
           <button type="button" className={iconButton} onClick={onEdit} aria-label="Edit" title="Edit">
             <Pencil className="size-4" />
@@ -138,7 +131,7 @@ export function Preview({
           {details.join(" · ")} · Added {formatDate(file.createdAt)}
           {file.userName ? ` by ${String(file.userName)}` : ""}
         </p>
-        {(file.description || file.tags?.length) && (
+        {Boolean(file.description || file.tags?.length) && (
           <p className="mt-1 text-white/80">
             {file.description}
             {file.tags?.length ? <span className="text-white/50">{file.description ? " · " : ""}{file.tags.map((t) => `#${t}`).join(" ")}</span> : null}

@@ -1,46 +1,24 @@
 "use client";
 
 import { Check, Copy, ExternalLink, FileText, Film, Globe, Image as ImageIcon, Lock, Mail, MessageCircle, Music, Share2, type LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
-import { fetchSignatures, fileUrl, formatDuration, hasThumb, publicLink, signedPath, type FileKind, type GalleryFile, type GalleryKey, type Variant } from "@/lib/gallery";
+import { formatDuration, publicLink, type FileKind, type GalleryFile } from "@/lib/gallery";
 import { joinLines, mailHref } from "@/lib/share";
 
 export const KIND_ICONS: Record<FileKind, LucideIcon> = { image: ImageIcon, video: Film, audio: Music, pdf: FileText, document: FileText };
 
-const VARIANTS: Variant[] = ["thumb", "view", "download"];
-
-/**
- * Signatures for the private files on screen, fetched in batches from the server.
- * Public files need none.
- */
-export function useSignatures(gallery: GalleryKey, files: GalleryFile[]) {
-  const [signatures, setSignatures] = useState<Record<string, string>>({});
-  const asked = useRef(new Set<string>());
-  // One string, so a live update that doesn't change the private files doesn't refetch.
-  const wanted = useMemo(() => files.filter((f) => f.visibility === "private").flatMap((f) => VARIANTS.map((v) => signedPath(f, v))).join("\n"), [files]);
-  useEffect(() => {
-    const missing = wanted.split("\n").filter((p) => p && !asked.current.has(p));
-    if (!missing.length) return;
-    missing.forEach((p) => asked.current.add(p));
-    fetchSignatures(gallery, missing)
-      .then((s) => setSignatures((old) => ({ ...old, ...s })))
-      .catch(() => missing.forEach((p) => asked.current.delete(p)));
-  }, [gallery, wanted]);
-  return signatures;
-}
-
 /** Picture preview of a file, or a big icon for kinds without one. */
-export function Thumb({ file, signatures, className, iconClassName }: { file: GalleryFile; signatures: Record<string, string>; className?: string; iconClassName?: string }) {
+export function Thumb({ file, className, iconClassName }: { file: GalleryFile; className?: string; iconClassName?: string }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const url = hasThumb(file) ? fileUrl(file, "thumb", signatures) : null;
+  const url = file.thumbUrl ?? null;
   const Icon = KIND_ICONS[file.kind];
   return (
     <div className={cn("relative overflow-hidden bg-tint", file.kind === "audio" && "bg-gradient-to-br from-brand-500/10 to-accent-violet/10", className)}>
       {url && failed !== url ? (
-        // Cloudinary resizes the thumbnail, so next/image isn't needed.
+        // Thumbnails are already small (made when the file was uploaded), so next/image isn't needed.
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="" loading="lazy" onError={() => setFailed(url)} className={cn("size-full", file.kind === "audio" ? "object-contain px-3" : "object-cover")} />
       ) : (
