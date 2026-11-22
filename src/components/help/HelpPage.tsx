@@ -180,6 +180,7 @@ const GUIDE: Section[] = [
         module: "exits",
         steps: [
           "When a team member resigns in the app, it appears on your dashboard and on their employee page under Resignation. It reaches you 24 hours after they submit it; until then they can cancel it.",
+          "If someone tells you in person or on the phone, open their employee page → Resignation and press Send resignation link (WhatsApp) or Copy resignation link. The page is at /hr/resign.",
           "Press Process to set the notice period, last working day, exit interview and checklist. A resignation by email or letter can be recorded there too.",
           "The employee can withdraw it until you start processing it.",
         ],

@@ -2,7 +2,7 @@
 
 import { doc } from "firebase/firestore";
 import { loggedSet, loggedUpdate } from "@/lib/audit";
-import { CheckCircle2, ClipboardList, LogOut, Pencil, Plus, Undo2, X } from "lucide-react";
+import { Check, CheckCircle2, ClipboardList, Copy, LogOut, MessageCircle, Pencil, Plus, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { DetailGrid, Loading } from "@/components/common/DetailShell";
@@ -10,7 +10,7 @@ import { friendlyError } from "@/components/resource/RecordEditor";
 import { ReferenceSelect } from "@/components/resource/ReferenceSelect";
 import { useSettings } from "@/components/settings/SettingsProvider";
 import { Badge, type Tone } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
@@ -22,6 +22,7 @@ import { useRecord } from "@/hooks/useCollection";
 import { db } from "@/lib/firebase";
 import { formatDate, todayISO } from "@/lib/format";
 import { updateRecord } from "@/lib/records";
+import { phoneForWhatsApp, whatsAppHref } from "@/lib/share";
 import { isCoolingOff, type ChecklistItem, type ExitDoc } from "@/lib/resignation";
 import type { BaseRecord } from "@/types";
 
@@ -67,8 +68,15 @@ export function ExitTab({ employee }: { employee: BaseRecord }) {
         <EmptyState
           icon={LogOut}
           title="No resignation"
-          description="Team members resign from Help & support → Leaving the company, and it shows up here. HR can also record one received by email or letter."
-          action={canEdit ? <Button onClick={() => setForm("record")}><Plus className="size-4" /> Record resignation</Button> : undefined}
+          description="Team members resign from Help & support → Leaving the company, and it shows up here. If they tell you directly, send them the link; or record one received by email or letter."
+          action={
+            canEdit ? (
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={() => setForm("record")}><Plus className="size-4" /> Record resignation</Button>
+                <ResignLink employee={employee} />
+              </div>
+            ) : undefined
+          }
         />
         {form === "record" && <RecordForm employee={employee} onClose={() => setForm(null)} />}
       </Card>
@@ -163,6 +171,35 @@ export function ExitTab({ employee }: { employee: BaseRecord }) {
       {form === "record" && <RecordForm employee={employee} onClose={() => setForm(null)} />}
       {form === "process" && <ProcessForm employee={employee} exit={exit} onClose={() => setForm(null)} />}
     </div>
+  );
+}
+
+/**
+ * The resignation page isn't in the menu on purpose. When someone tells HR they want to leave,
+ * HR can send them the link here: on WhatsApp if their phone is on file, or copied to paste anywhere.
+ */
+function ResignLink({ employee }: { employee: BaseRecord }) {
+  const [copied, setCopied] = useState(false);
+  // Only rendered after the record loads in the browser, so window is there.
+  const url = `${typeof window === "undefined" ? "" : window.location.origin}/hr/resign`;
+  const first = String(employee.fullName ?? "").split(" ")[0] || "there";
+  const text = `Hi ${first}, as we discussed, you can submit your resignation in the ERP here: ${url}\nSign in with your work account. It reaches HR 24 hours after you submit it, and you can cancel it until then.`;
+  const copy = async () => {
+    await navigator.clipboard.writeText(text).catch(() => undefined);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <>
+      {phoneForWhatsApp(employee.phone) && (
+        <a href={whatsAppHref(employee.phone, text)} target="_blank" rel="noreferrer" className={buttonClasses("secondary")}>
+          <MessageCircle className="size-4" /> Send resignation link
+        </a>
+      )}
+      <Button variant={phoneForWhatsApp(employee.phone) ? "ghost" : "secondary"} onClick={() => void copy()}>
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />} {copied ? "Copied" : "Copy resignation link"}
+      </Button>
+    </>
   );
 }
 
