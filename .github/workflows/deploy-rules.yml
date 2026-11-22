@@ -57,7 +57,12 @@ jobs:
       - name: Publish Firestore rules
         run: npx firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive
 
-      # Storage must be switched on in the Firebase console first; until then this step only warns.
+      # Names the bucket so the CLI doesn't have to look up the "default bucket", which Google
+      # reports as missing for newer *.firebasestorage.app buckets. Only this deploy uses the copy;
+      # the emulators keep reading firebase.json.
       - name: Publish Storage rules
-        continue-on-error: true
-        run: npx firebase deploy --only storage --project "$FIREBASE_PROJECT" --non-interactive
+        env:
+          STORAGE_BUCKET: fyntric-erp.firebasestorage.app
+        run: |
+          node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync("firebase.json","utf8"));c.storage=[{bucket:process.env.STORAGE_BUCKET,rules:c.storage.rules}];fs.writeFileSync("firebase.deploy.json",JSON.stringify(c))'
+          npx firebase deploy --only storage --config firebase.deploy.json --project "$FIREBASE_PROJECT" --non-interactive

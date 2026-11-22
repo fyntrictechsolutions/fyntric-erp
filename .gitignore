@@ -44,3 +44,4 @@ next-env.d.ts
 # firebase emulators
 *-debug.log
 .firebase/
+firebase.deploy.json
