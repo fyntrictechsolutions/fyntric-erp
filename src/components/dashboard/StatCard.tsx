@@ -29,17 +29,23 @@ export function StatCard({
   loading?: boolean;
 }) {
   const body = (
-    <Card className="group relative h-full overflow-hidden p-5 transition-all hover:-translate-y-0.5 hover:border-line-strong">
+    <Card className="group relative h-full overflow-hidden p-3.5 transition-all sm:p-5 hover:-translate-y-0.5 hover:border-line-strong">
       <div aria-hidden className={cn("pointer-events-none absolute -top-10 -right-10 size-28 rounded-full bg-gradient-to-br opacity-15 blur-2xl transition-opacity group-hover:opacity-30", ACCENTS[accent])} />
+      {/* On phones (two cards a row) the icon sits small beside the label; from tablets up it's the larger tile on the right. */}
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-muted">{label}</p>
-          <p className="mt-2 font-display text-2xl font-semibold tracking-tight text-foreground tabular-nums">
-            {loading ? <span className="inline-block h-7 w-16 animate-pulse rounded bg-tint-strong" /> : value}
+          <p className="flex items-center gap-1.5 text-xs leading-snug text-muted sm:text-sm">
+            <span className={cn("grid size-5 shrink-0 place-items-center rounded-md bg-gradient-to-br text-white sm:hidden", ACCENTS[accent])}>
+              <Icon className="size-3" aria-hidden />
+            </span>
+            <span className="min-w-0">{label}</span>
           </p>
-          {hint && <p className="mt-1 truncate text-xs text-subtle">{hint}</p>}
+          <p className="mt-1.5 font-display text-xl font-semibold tracking-tight text-foreground tabular-nums sm:mt-2 sm:text-2xl">
+            {loading ? <span className="inline-block h-6 w-14 animate-pulse rounded bg-tint-strong sm:h-7 sm:w-16" /> : value}
+          </p>
+          {hint && <p className="mt-0.5 truncate text-[11px] text-subtle sm:mt-1 sm:text-xs">{hint}</p>}
         </div>
-        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm", ACCENTS[accent])}>
+        <span className={cn("hidden size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm sm:grid", ACCENTS[accent])}>
           <Icon className="size-5" aria-hidden />
         </span>
       </div>
