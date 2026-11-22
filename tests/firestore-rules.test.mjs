@@ -97,6 +97,31 @@ describe("hiring, salaries and exits", () => {
     assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "exits", "emp1"), { status: "requested" })), true);
     assert.equal(await allowed(setDoc(doc(users.staff.db, "exits", "emp1"), { status: "withdrawn" })), false);
   });
+  test("employees submit, cancel and withdraw their own resignation", async () => {
+    const staff = users.staff;
+    await admin.doc(`users/${staff.uid}`).update({ employeeId: "empS" });
+    const own = doc(staff.db, "exits", "empS");
+    const base = { employeeId: "empS", employeeName: "S", status: "requested", source: "self", receivedOn: "2026-11-23", requestedLastDay: null, reason: "Moving", userId: staff.uid, userName: "S", submittedAt: Date.now(), createdAt: Date.now(), updatedAt: Date.now() };
+    // The 24-hour cool-off can't be skipped, and nobody files for someone else.
+    assert.equal(await allowed(setDoc(own, { ...base, sendAt: Date.now() + 1000 })), false);
+    assert.equal(await allowed(setDoc(doc(staff.db, "exits", "emp1"), { ...base, employeeId: "emp1", sendAt: Date.now() + 864e5 + 60000 })), false);
+    assert.equal(await allowed(setDoc(own, { ...base, sendAt: Date.now() + 864e5 + 60000, checklist: [] })), false);
+    assert.equal(await allowed(setDoc(own, { ...base, sendAt: Date.now() + 864e5 + 60000 })), true);
+    assert.equal(await allowed(getDoc(own)), true);
+    assert.equal(await allowed(getDoc(doc(staff.db, "exits", "emp1"))), false);
+    assert.equal(await allowed(updateDoc(own, { status: "processing" })), false);
+    // Cancel during the cool-off.
+    assert.equal(await allowed(deleteDoc(own)), true);
+    // After the cool-off: no deleting, but withdrawing works until HR processes it.
+    await admin.doc("exits/empS").set({ ...base, sendAt: Date.now() - 1000 });
+    assert.equal(await allowed(deleteDoc(own)), false);
+    assert.equal(await allowed(updateDoc(own, { status: "withdrawn", withdrawnOn: "2026-11-24", withdrawnBy: "S", updatedAt: Date.now() })), true);
+    assert.equal(await allowed(setDoc(own, { ...base, sendAt: Date.now() + 864e5 + 60000 })), true);
+    await admin.doc("exits/empS").update({ status: "processing" });
+    assert.equal(await allowed(updateDoc(own, { status: "withdrawn", updatedAt: Date.now() })), false);
+    // Other staff can't see it.
+    assert.equal(await allowed(getDoc(doc(users.sales.db, "exits", "empS"))), false);
+  });
   test("files: HR uploads; others can't read", async () => {
     const hr = users.hr_manager;
     assert.equal(await allowed(addDoc(collection(hr.db, "files"), { ownerId: "x", data: "data:,hi", userId: hr.uid })), true);

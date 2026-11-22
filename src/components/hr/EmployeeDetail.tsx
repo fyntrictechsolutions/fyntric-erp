@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound, RecordFields, Tabs, WithRecordId } from "@/components/common/DetailShell";
@@ -36,7 +37,8 @@ type Tab = "details" | "attendance" | "salary" | "exit";
 function EmployeeDetail({ id }: { id: string }) {
   const profile = useProfile();
   const { data: employee, loading } = useRecord("employees", id);
-  const [tab, setTab] = useState<Tab>("details");
+  const params = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (params.get("tab") === "exit" && canRead(profile.role, "exits") ? "exit" : "details"));
   const [editing, setEditing] = useState(false);
 
   if (loading) return <Loading />;

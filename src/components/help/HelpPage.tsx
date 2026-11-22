@@ -18,6 +18,7 @@ interface Topic {
   module?: ModuleKey;
   roles?: Role[];
   href?: string;
+  linkLabel?: string;
   steps: string[];
 }
 
@@ -175,6 +176,16 @@ const GUIDE: Section[] = [
         ],
       },
       {
+        title: "Resignations",
+        module: "exits",
+        steps: [
+          "When a team member resigns in the app, it appears on your dashboard and on their employee page under Resignation. It reaches you 24 hours after they submit it; until then they can cancel it.",
+          "If someone tells you in person or on the phone, open their employee page → Resignation and press Send resignation link (WhatsApp) or Copy resignation link. The page is at /hr/resign.",
+          "Press Process to set the notice period, last working day, exit interview and checklist. A resignation by email or letter can be recorded there too.",
+          "The employee can withdraw it until you start processing it.",
+        ],
+      },
+      {
         title: "Hiring and offer letters",
         module: "candidates",
         steps: ["Hiring tracks each candidate through the interview rounds.", "Prepare the offer letter from the candidate's page; its wording comes from Settings → Offer letter."],
@@ -205,6 +216,21 @@ const GUIDE: Section[] = [
         title: "Reports and the activity log",
         module: "reports",
         steps: ["Reports show sales, income, spending, wages and profit for each financial year.", "The activity log (admins) shows who changed what, and when."],
+      },
+    ],
+  },
+  {
+    title: "Something else",
+    topics: [
+      {
+        title: "Leaving the company",
+        roles: INTERNAL_ROLES,
+        href: "/hr/resign",
+        linkLabel: "Continue",
+        steps: [
+          "If something at work isn't right, please talk to your manager or HR first. Most problems can be fixed.",
+          "If you've decided to resign, you can do it here. It reaches HR 24 hours after you submit it, and until then you can cancel it.",
+        ],
       },
     ],
   },
@@ -294,7 +320,7 @@ export function HelpPage() {
                       </ol>
                       {t.href && (
                         <Link href={t.href} className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
-                          Go there →
+                          {t.linkLabel ?? "Go there"} →
                         </Link>
                       )}
                     </div>

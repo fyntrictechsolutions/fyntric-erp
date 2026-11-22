@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarCheck, CalendarOff, FileText, FolderKanban, Receipt, Target, Timer, Users } from "lucide-react";
+import { collection, query, where } from "firebase/firestore";
+import { CalendarCheck, CalendarOff, ChevronRight, FileText, FolderKanban, LogOut, Receipt, Target, Timer, Users } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -9,8 +10,10 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MODULES } from "@/config/modules";
 import { ROLE_LABELS } from "@/config/roles";
-import { useModuleRecords } from "@/hooks/useCollection";
+import { useLiveQuery, useModuleRecords } from "@/hooks/useCollection";
+import { db } from "@/lib/firebase";
 import { formatCurrency, formatDate, monthOf, todayISO } from "@/lib/format";
+import { isCoolingOff, type ExitDoc } from "@/lib/resignation";
 import type { BaseRecord } from "@/types";
 import { StatCard } from "./StatCard";
 
@@ -73,6 +76,8 @@ export function Dashboard() {
         title={`${greeting}, ${profile.displayName.split(" ")[0]}`}
         description={`${ROLE_LABELS[profile.role]} · ${formatDate(today)}`}
       />
+
+      {reviewsLeave && <NewResignations />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {projects.allowed && (
@@ -218,6 +223,33 @@ function RevenueCard({ invoices, payments }: { invoices: BaseRecord[]; payments:
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand-600" /> Collected</span>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/** For HR and admins: resignations waiting for them (self-submitted ones after their 24-hour cool-off). */
+function NewResignations() {
+  const { data } = useLiveQuery<ExitDoc>(() => query(collection(db(), "exits"), where("status", "==", "requested")), "exits:requested");
+  const waiting = data.filter((e) => !isCoolingOff(e));
+  if (!waiting.length) return null;
+  return (
+    <Card className="mb-6 border-amber-500/40 bg-amber-500/5">
+      <div className="flex items-center gap-2 px-5 pt-4 text-sm font-semibold text-foreground">
+        <LogOut className="size-4 text-amber-600" /> {waiting.length === 1 ? "A resignation needs your attention" : `${waiting.length} resignations need your attention`}
+      </div>
+      <ul className="divide-y divide-line">
+        {waiting.map((e) => (
+          <li key={e.id}>
+            <Link href={`/hr/employees/view?id=${e.id}&tab=exit`} className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-tint">
+              <span className="min-w-0">
+                <span className="font-medium text-foreground">{String(e.employeeName ?? "Employee")}</span>
+                <span className="text-muted"> · received {formatDate(e.receivedOn)}{e.requestedLastDay ? `, asks to leave on ${formatDate(e.requestedLastDay)}` : ""}</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-subtle" />
+            </Link>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
