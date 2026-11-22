@@ -1,7 +1,8 @@
 # Publishes firestore.rules and storage.rules to Firebase whenever they change on main,
-# after the rules tests pass in the emulators. Needs one repository secret:
-#   FIREBASE_SERVICE_ACCOUNT: the JSON key of a service account with the
-#   Firebase Rules Admin, Firebase Viewer and Service Usage Consumer roles (see README, "Rules publish themselves").
+# after the rules tests pass in the emulators. It signs in to Google without any stored key
+# (Workload Identity Federation): Google trusts only this repo's main branch, acting as the
+# github-rules-deploy service account (Firebase Rules Admin, Firebase Viewer, Service Usage Consumer).
+# See README, "Rules publish themselves".
 name: Deploy Firebase rules
 
 on:
@@ -21,12 +22,15 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
       FIREBASE_PROJECT: fyntric-erp
+      WIF_PROVIDER: projects/90059175990/locations/global/workloadIdentityPools/github/providers/github-repo
+      DEPLOY_ACCOUNT: github-rules-deploy@fyntric-erp.iam.gserviceaccount.com
     steps:
       - uses: actions/checkout@v4
 
@@ -45,18 +49,10 @@ jobs:
       - name: Test the rules in the emulators
         run: npm run test:rules
 
-      - name: Check the deploy key is set
-        env:
-          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::Add the FIREBASE_SERVICE_ACCOUNT secret (see README) so rules can be published."
-            exit 1
-          fi
-
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_ACCOUNT }}
 
       - name: Publish Firestore rules
         run: npx firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive
