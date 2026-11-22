@@ -117,10 +117,21 @@ body {
   body {
     background: #fff !important;
   }
+  /* A little smaller than on screen, so a usual invoice (items, totals, signature) fits one page. */
+  html {
+    font-size: 13px;
+  }
   .print-sheet {
     box-shadow: none !important;
     border: 0 !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
     color: #0b1020 !important;
     background: #fff !important;
+  }
+  .print-sheet tr,
+  .print-keep {
+    break-inside: avoid;
   }
 }

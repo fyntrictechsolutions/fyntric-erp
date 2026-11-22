@@ -3,7 +3,7 @@
 import { ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { useSettings } from "@/components/settings/SettingsProvider";
 import { Button } from "@/components/ui/Button";
@@ -48,7 +48,22 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [editor, setEditor] = useState<{ record: BaseRecord | null } | null>(null);
+  const [editor, setEditor] = useState<{ record: BaseRecord | null; preset?: Record<string, unknown> } | null>(null);
+
+  // "?new=1&field=value" opens a new record with those values (e.g. Raise invoice from a recurring charge).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") !== "1" || !access.canCreate) return;
+    params.delete("new");
+    const names = new Set(module.fields.map((f) => f.name));
+    const preset = Object.fromEntries([...params].filter(([k]) => names.has(k)));
+    // The URL is only readable after hydration, so the form opens just after the page shows.
+    const t = setTimeout(() => {
+      window.history.replaceState(null, "", window.location.pathname);
+      setEditor({ record: null, preset });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [module, access.canCreate]);
 
   const statusField = module.fields.find((f) => f.name === module.statusField);
   const statusOptions = statusField ? optionsFor(statusField, settings) : [];
@@ -86,6 +101,10 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
 
   const runAction = async (action: RecordAction, record: BaseRecord) => {
     if (action.confirm && !window.confirm(action.confirm)) return;
+    if (action.href) {
+      router.push(action.href(record));
+      return;
+    }
     try {
       if (action.run) await action.run(record, { profile, settings });
       else if (action.patch) await updateRecord(module.key, record.id, action.patch(record, { profile, settings }));
@@ -227,7 +246,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
         )}
       </Card>
 
-      {editor && <RecordEditor module={module} record={editor.record} onClose={close} />}
+      {editor && <RecordEditor module={module} record={editor.record} preset={editor.preset} onClose={close} />}
     </div>
   );
 }

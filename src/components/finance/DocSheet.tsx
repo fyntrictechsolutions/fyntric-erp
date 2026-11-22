@@ -77,10 +77,10 @@ export function PaymentDetails() {
 export function Signatory() {
   const b = useSettings().business;
   return (
-    <div className="mt-10 flex justify-end text-sm">
+    <div className="print-keep mt-10 flex justify-end text-sm print:mt-6">
       <div className="text-center">
         <p className="text-slate-600">For {b.name}</p>
-        <div className="mt-12 w-56 border-t border-slate-300 pt-1 text-xs text-slate-500">Authorised signatory</div>
+        <div className="mt-12 w-56 print:mt-10 border-t border-slate-300 pt-1 text-xs text-slate-500">Authorised signatory</div>
       </div>
     </div>
   );

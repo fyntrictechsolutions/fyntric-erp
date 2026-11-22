@@ -153,7 +153,7 @@ function InvoiceSheet({ inv, client, payments }: { inv: BaseRecord; client: Base
         ]}
       />
 
-      <section className="grid gap-6 py-6 sm:grid-cols-2">
+      <section className="grid gap-6 py-6 sm:grid-cols-2 print:py-4">
         <div>
           <SheetLabel>Bill to</SheetLabel>
           <p className="mt-1 font-medium text-slate-900">{String(client?.name ?? inv.clientIdLabel ?? "—")}</p>
@@ -227,7 +227,7 @@ function InvoiceSheet({ inv, client, payments }: { inv: BaseRecord; client: Base
       </div>
 
       {payments && payments.length > 0 && (
-        <section className="mt-8 border-t border-slate-200 pt-6">
+        <section className="mt-8 border-t border-slate-200 pt-6 print:mt-4 print:pt-3">
           <SheetLabel>Payments received</SheetLabel>
           <table className="mt-2 w-full text-left text-sm">
             <tbody className="divide-y divide-slate-100">
@@ -247,14 +247,17 @@ function InvoiceSheet({ inv, client, payments }: { inv: BaseRecord; client: Base
       )}
 
       {Boolean(inv.notes) && (
-        <section className="mt-8 border-t border-slate-200 pt-6">
+        <section className="mt-8 border-t border-slate-200 pt-6 print:mt-4 print:pt-3">
           <SheetLabel>Notes</SheetLabel>
           <p className="mt-1 text-sm whitespace-pre-line text-slate-700">{String(inv.notes)}</p>
         </section>
       )}
 
-      {balance > 0 && <PaymentDetails />}
-      <Signatory />
+      {/* Bank details and the signature stay together at the end, never split across pages. */}
+      <div className="print-keep">
+        {balance > 0 && <PaymentDetails />}
+        <Signatory />
+      </div>
     </Sheet>
   );
 }

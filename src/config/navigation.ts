@@ -38,7 +38,7 @@ export const NAVIGATION: NavSection[] = [
   { title: "Sales", items: [moduleItem("leads"), moduleItem("estimates"), moduleItem("clients"), moduleItem("products"), { label: "Gallery", href: "/crm/gallery", icon: Images, module: "salesGallery" }] },
   { title: "Delivery", items: [moduleItem("projects"), moduleItem("timesheets")] },
   { title: "Purchases", items: [moduleItem("purchases"), moduleItem("suppliers")] },
-  { title: "Finance", items: [moduleItem("invoices"), moduleItem("payments"), moduleItem("expenses")] },
+  { title: "Finance", items: [moduleItem("invoices"), moduleItem("recurring"), moduleItem("payments"), moduleItem("expenses")] },
   { title: "Insights", items: [{ label: "Reports", href: "/reports", icon: BarChart3, module: "reports" }] },
   {
     title: "Admin",

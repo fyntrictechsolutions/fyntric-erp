@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { useSettings } from "@/components/settings/SettingsProvider";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import type { ModuleDefinition } from "@/config/modules";
 import type { Role } from "@/config/roles";
 import { moduleAccess } from "@/lib/access";
+import { db } from "@/lib/firebase";
 import { createRecord, updateRecord } from "@/lib/records";
 import type { BaseRecord } from "@/types";
 import { initialValues, RecordForm, toStoredValues } from "./RecordForm";
@@ -38,6 +40,33 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const formId = `form-${module.key}`;
+  const [filledNote, setFilledNote] = useState<string | null>(null);
+
+  // A new record opened with a reference already picked (e.g. from a link) fills in from it, as picking it would.
+  useEffect(() => {
+    if (record || !preset) return;
+    const field = module.fields.find((f) => f.fill && f.reference && f.reference.module !== "team" && typeof preset[f.name] === "string" && preset[f.name]);
+    if (!field) return;
+    let live = true;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db(), field.reference!.module, String(preset[field.name])));
+        if (!snap.exists() || !live) return;
+        const picked = { id: snap.id, ...snap.data() } as BaseRecord;
+        const ref = field.reference!;
+        const label = ref.format ? ref.format(picked) : String(picked[ref.labelField] ?? "");
+        const { values: filled, note } = await field.fill!(picked, {});
+        if (!live) return;
+        setValues((v) => ({ ...v, [`${field.name}Label`]: label, ...filled }));
+        setFilledNote(note ?? null);
+      } catch {
+        if (live) setFilledNote("Couldn't fill the form in. Fill it in by hand.");
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [module, record, preset]);
 
   const save = async () => {
     setSaving(true);
@@ -90,6 +119,7 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
       }
     >
       {message && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">{message}</p>}
+      {filledNote && <p role="status" className="mb-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200">{filledNote}</p>}
       <RecordForm
         formId={formId}
         module={module}

@@ -311,6 +311,14 @@ service cloud.firestore {
       allow delete: if role() == 'admin';
     }
 
+    // Recurring charges (AMC, hosting): whoever raises invoices keeps the schedule.
+    match /recurring/{id} {
+      allow read: if hasRole(['admin', 'sales', 'investor', 'viewer']);
+      allow create: if hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if role() == 'admin';
+    }
+
     match /payments/{id} {
       allow read: if hasRole(['admin', 'sales', 'investor', 'viewer']);
       // Sales staff record money received against invoices; only admins record money paid out.

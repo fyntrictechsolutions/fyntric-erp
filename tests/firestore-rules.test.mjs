@@ -397,6 +397,18 @@ describe("module access by role", () => {
     assert.equal(await allowed(getDocs(collection(users.investor.db, "invoices"))), true);
     assert.equal(await allowed(getDocs(collection(users.staff.db, "invoices"))), false);
   });
+  test("recurring billing: sales keeps the schedule; investor reads; staff and HR nothing", async () => {
+    const mine = (u) => ({ title: "AMC", clientId: "c1", frequency: "annually", nextDue: "2027-12-01", status: "active", userId: u.uid, createdBy: u.uid });
+    assert.equal(await allowed(setDoc(doc(users.sales.db, "recurring", "r1"), mine(users.sales))), true);
+    assert.equal(await allowed(updateDoc(doc(users.sales.db, "recurring", "r1"), { nextDue: "2028-12-01" })), true);
+    assert.equal(await allowed(deleteDoc(doc(users.sales.db, "recurring", "r1"))), false);
+    assert.equal(await allowed(getDocs(collection(users.investor.db, "recurring"))), true);
+    assert.equal(await allowed(updateDoc(doc(users.investor.db, "recurring", "r1"), { status: "ended" })), false);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "recurring"))), false);
+    assert.equal(await allowed(getDocs(collection(users.hr_manager.db, "recurring"))), false);
+    assert.equal(await allowed(setDoc(doc(users.staff.db, "recurring", "r2"), mine(users.staff))), false);
+    assert.equal(await allowed(deleteDoc(doc(users.admin.db, "recurring", "r1"))), true);
+  });
   test("nobody can reassign ownership of a record", async () => {
     assert.equal(await allowed(updateDoc(doc(users.admin.db, "invoices", "i1"), { userId: users.admin.uid })), false);
   });
