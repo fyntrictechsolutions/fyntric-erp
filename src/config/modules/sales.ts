@@ -1,8 +1,8 @@
 import { CalendarClock, Check, FileSignature, Package, Send } from "lucide-react";
 import { todayISO } from "@/lib/format";
-import { groupedTotals, groupFields } from "@/lib/lineItems";
+import { BILLING_GROUPS, DISCOUNT_FIELDS, discountsOf, groupedTotals, groupFields, hasBilling } from "@/lib/lineItems";
 import { ACTIVE_STATUS, addDays, BILLING_CYCLES, docNumber } from "./options";
-import type { LineItem, ModuleDefinition, SelectOption } from "./types";
+import type { FieldDefinition, LineItem, ModuleDefinition, SelectOption } from "./types";
 
 export const FOLLOWUP_STATUS: SelectOption[] = [
   { value: "scheduled", label: "Scheduled", tone: "blue" },
@@ -99,16 +99,37 @@ export const estimatesModule: ModuleDefinition = {
     { name: "validUntil", label: "Valid until", type: "date", defaultValue: ({ settings }) => addDays(todayISO(), settings.app.estimateValidityDays) },
     { name: "status", label: "Status", type: "select", required: true, defaultValue: "draft", options: ESTIMATE_STATUS },
     { name: "items", label: "Items", type: "items", required: true },
-    { name: "discount", label: "Discount (₹, before GST)", type: "currency", min: 0, help: "Taken off the one-time charges." },
+    // One discount per kind of charge, each shown once there's a line of that kind.
+    ...BILLING_GROUPS.map(
+      (g): FieldDefinition => ({
+        name: DISCOUNT_FIELDS[g.key],
+        label: `Discount on ${g.key === "once" ? "one-time total" : g.key === "annually" ? "annual recurring" : "monthly recurring"} (₹)`,
+        type: "currency",
+        min: 0,
+        help: g.key === "once" ? "Before GST." : `Before GST, off each ${g.key === "annually" ? "year's" : "month's"} charge.`,
+        showWhen: (v) => hasBilling(v.items, g.key),
+      }),
+    ),
+    { name: "discount", label: "Discount", type: "currency", computed: true },
     { name: "subtotal", label: "Subtotal", type: "currency", computed: true },
     { name: "taxTotal", label: "GST", type: "currency", computed: true },
     { name: "total", label: "Amount", type: "currency", computed: true, display: "billingGroups" },
     { name: "notes", label: "Notes for the client", type: "textarea", wide: true },
     { name: "terms", label: "Terms", type: "textarea", wide: true, defaultValue: ({ settings }) => settings.app.estimateTerms },
   ],
+  // Older estimates had one discount, taken off the first group: show it in that group's box.
+  toForm: (record) => {
+    const legacy = discountsOf(record);
+    if (legacy !== null && typeof legacy === "object") return record;
+    const first = groupedTotals(record.items as LineItem[] | undefined)[0];
+    return first && Number(legacy) ? { ...record, [DISCOUNT_FIELDS[first.key]]: legacy } : record;
+  },
   validate: (v) => (Array.isArray(v.items) && v.items.length ? null : "Add at least one item."),
   beforeSave: (data, { settings }) => {
-    const groups = groupedTotals((data.items as LineItem[] | undefined) ?? [], data.discount);
+    const items = (data.items as LineItem[] | undefined) ?? [];
+    // A discount on a kind of charge the estimate no longer has is dropped.
+    for (const g of BILLING_GROUPS) if (!hasBilling(items, g.key) || !Number(data[DISCOUNT_FIELDS[g.key]])) data[DISCOUNT_FIELDS[g.key]] = null;
+    const groups = groupedTotals(items, Object.fromEntries(BILLING_GROUPS.map((g) => [g.key, data[DISCOUNT_FIELDS[g.key]]])));
     const sum = (k: "subtotal" | "discount" | "taxTotal" | "total") => Math.round(groups.reduce((t, g) => t + g[k], 0) * 100) / 100;
     return {
       ...data,

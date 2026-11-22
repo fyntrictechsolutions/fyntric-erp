@@ -49,13 +49,20 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
         return;
       }
       const stored = toStoredValues(module, values, { settings, profile });
+      // Create-only answers go to afterCreate, not onto the record.
+      const extra: Record<string, unknown> = {};
+      for (const f of module.fields)
+        if (f.createOnly) {
+          extra[f.name] = stored[f.name];
+          delete stored[f.name];
+        }
       let id = record?.id ?? "";
       if (record) {
         await updateRecord(module.key, record.id, stored);
       } else {
         const ref = await createRecord(module.key, stored, profile);
         id = ref.id;
-        await module.afterCreate?.(id, stored, { profile, settings });
+        await module.afterCreate?.(id, { ...stored, ...extra }, { profile, settings });
       }
       await module.afterChange?.({ ...record, ...stored }, { profile, settings });
       onSaved?.(id);

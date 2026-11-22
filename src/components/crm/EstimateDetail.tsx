@@ -19,7 +19,7 @@ import { useRecord } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { groupedTotals } from "@/lib/lineItems";
+import { discountsOf, groupedTotals } from "@/lib/lineItems";
 import { updateRecord } from "@/lib/records";
 import { phoneForWhatsApp } from "@/lib/share";
 import type { BaseRecord } from "@/types";
@@ -31,7 +31,7 @@ export function EstimateDetailPage() {
 }
 
 function summaryText(est: BaseRecord, lead: BaseRecord | null, businessName: string) {
-  const groups = groupedTotals(est.items as LineItem[] | undefined, est.discount);
+  const groups = groupedTotals(est.items as LineItem[] | undefined, discountsOf(est));
   const several = groups.length > 1 || groups[0]?.key !== "once";
   const lines = [
     `Hello ${lead?.name ?? est.leadIdLabel ?? ""},`,
@@ -148,7 +148,7 @@ function EstimateDetail({ id }: { id: string }) {
 function EstimateSheet({ est, lead }: { est: BaseRecord; lead: BaseRecord | null }) {
   const settings = useSettings();
   const b = settings.business;
-  const groups = groupedTotals(est.items as LineItem[] | undefined, est.discount);
+  const groups = groupedTotals(est.items as LineItem[] | undefined, discountsOf(est));
   const several = groups.length > 1 || groups[0]?.key !== "once";
 
   return (

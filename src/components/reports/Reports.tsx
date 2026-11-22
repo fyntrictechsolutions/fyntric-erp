@@ -13,7 +13,7 @@ import { ESTIMATE_STATUS } from "@/config/modules/sales";
 import { canRead, type ModuleKey } from "@/config/roles";
 import { useModuleRecords } from "@/hooks/useCollection";
 import { cn } from "@/lib/cn";
-import { formatCurrency, formatDate, todayISO } from "@/lib/format";
+import { asList, formatCurrency, formatDate, todayISO } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 
 type Tab = "pnl" | "sales" | "delivery" | "gst" | "assets" | "dues" | "wages";
@@ -286,7 +286,15 @@ function Sales({ data, fy }: { data: Data; fy: number }) {
           <Table
             title="Leads by service"
             cols={[{ label: "Service" }, { label: "Leads", align: "right" }, { label: "Estimated value", align: "right" }]}
-            rows={[...sumBy(leads, (l) => String(l.service ?? "Not set"), () => 1)].sort((a, b) => b[1] - a[1]).map(([svc, c]) => [svc, c, money(leads.filter((l) => (l.service ?? "Not set") === svc).reduce((s, l) => s + n(l.estimatedValue), 0))])}
+            rows={(() => {
+              // A lead can ask for several services; it counts under each of them.
+              const per = new Map<string, [number, number]>();
+              for (const l of leads) for (const svc of asList(l.service).length ? asList(l.service) : ["Not set"]) {
+                const [c, v] = per.get(svc) ?? [0, 0];
+                per.set(svc, [c + 1, v + n(l.estimatedValue)]);
+              }
+              return [...per].sort((a, b) => b[1][0] - a[1][0]).map(([svc, [c, v]]) => [svc, c, money(v)]);
+            })()}
           />
         </div>
       )}

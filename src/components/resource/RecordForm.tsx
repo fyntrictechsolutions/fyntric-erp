@@ -1,11 +1,13 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useSettings, type Settings } from "@/components/settings/SettingsProvider";
 import { inputClasses, labelClasses } from "@/components/ui/fieldStyles";
 import type { FieldDefinition, FormContext, ModuleDefinition, SelectOption } from "@/config/modules";
 import type { Role } from "@/config/roles";
 import { cn } from "@/lib/cn";
+import { asList } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { ReferenceSelect } from "./ReferenceSelect";
@@ -20,7 +22,11 @@ export function optionsFor(field: FieldDefinition, settings: Settings): SelectOp
 
 /** Initial form values: the record being edited, or each field's default for a new one. */
 export function initialValues(module: ModuleDefinition, ctx: FormContext, record?: BaseRecord | null, preset?: Values): Values {
-  if (record) return { ...record };
+  if (record) {
+    const values: Values = module.toForm ? module.toForm(record) : { ...record };
+    for (const f of module.fields) if (f.type === "multiselect") values[f.name] = asList(record[f.name]);
+    return values;
+  }
   const values: Values = {};
   for (const f of module.fields) {
     if (f.defaultToMe && ctx.profile) {
@@ -43,6 +49,8 @@ export function toStoredValues(module: ModuleDefinition, values: Values, ctx: Fo
       out[f.name] = v === "" || v === undefined || v === null ? null : Number(v);
     } else if (f.type === "checkbox") {
       out[f.name] = Boolean(v);
+    } else if (f.type === "multiselect") {
+      out[f.name] = asList(v);
     } else if (v === "") {
       out[f.name] = null;
     }
@@ -51,10 +59,11 @@ export function toStoredValues(module: ModuleDefinition, values: Values, ctx: Fo
 }
 
 /** Fields this person sees in the form for these values. */
-export function visibleFields(module: ModuleDefinition, values: Values, role: Role, isManager: boolean) {
+export function visibleFields(module: ModuleDefinition, values: Values, role: Role, isManager: boolean, isEditing = false) {
   return module.fields.filter(
     (f) =>
       !f.computed &&
+      !(f.createOnly && isEditing) &&
       !f.hidden &&
       !(f.managerOnly && !isManager) &&
       !f.hiddenFor?.includes(role) &&
@@ -75,7 +84,7 @@ interface RecordFormProps {
 
 export function RecordForm({ formId, module, values, onChange, onSubmit, role, isManager, isEditing }: RecordFormProps) {
   const [touched, setTouched] = useState(false);
-  const visible = visibleFields(module, values, role, isManager);
+  const visible = visibleFields(module, values, role, isManager, isEditing);
   // Filling from another record is async, so patches merge into the latest values, not the ones at click time.
   const latest = useRef(values);
   useLayoutEffect(() => {
@@ -184,6 +193,36 @@ function FieldInput({
             </option>
           ))}
         </select>
+      );
+    }
+    case "multiselect": {
+      const picked = asList(raw);
+      const options = [...optionsFor(field, settings)];
+      for (const v of picked) if (!options.some((o) => o.value === v)) options.push({ value: v, label: v });
+      const toggle = (v: string) => set({ [field.name]: picked.includes(v) ? picked.filter((x) => x !== v) : [...picked, v] });
+      return (
+        <div id={id} role="group" aria-label={field.label} className="flex flex-wrap gap-2 pt-0.5">
+          {options.map((o) => {
+            const on = picked.includes(o.value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                aria-pressed={on}
+                disabled={disabled}
+                onClick={() => toggle(o.value)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                  on ? "border-brand-500 bg-accent-soft font-medium text-accent" : "border-line text-body hover:border-line-strong",
+                )}
+              >
+                {on && <Check className="size-3.5" aria-hidden />}
+                {o.label}
+              </button>
+            );
+          })}
+          {!options.length && <p className="text-sm text-subtle">No options yet. Add them in Settings → Lists.</p>}
+        </div>
       );
     }
     case "reference":

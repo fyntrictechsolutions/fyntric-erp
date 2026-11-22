@@ -43,15 +43,38 @@ export interface GroupTotals extends ReturnType<typeof discountedTotals> {
   items: { item: LineItem; index: number }[];
 }
 
+/** Record fields holding the discount on each group of an estimate. */
+export const DISCOUNT_FIELDS: Record<Billing, string> = { once: "discountOnce", annually: "discountAnnually", monthly: "discountMonthly" };
+
+/**
+ * Discounts of a record for groupedTotals: one per group, or for older estimates the single `discount`,
+ * which came off the first group (the one-time charges, if any).
+ */
+export function discountsOf(record: Record<string, unknown>): Partial<Record<Billing, unknown>> | unknown {
+  const keys = Object.keys(DISCOUNT_FIELDS) as Billing[];
+  if (keys.some((k) => record[DISCOUNT_FIELDS[k]] !== undefined)) return Object.fromEntries(keys.map((k) => [k, record[DISCOUNT_FIELDS[k]]]));
+  return record.discount;
+}
+
 /**
  * Lines split into one-time, yearly and monthly groups, each with its own totals, since adding them together means nothing.
- * The discount comes off the one-time charges, or the first group there is when nothing is one-time.
+ * `discounts` gives each group its own discount; a single number comes off the first group (older estimates).
  */
-export function groupedTotals(items: LineItem[] | undefined, discountInput?: unknown): GroupTotals[] {
+export function groupedTotals(items: LineItem[] | undefined, discounts?: Partial<Record<Billing, unknown>> | unknown): GroupTotals[] {
   const list = Array.isArray(items) ? items : [];
   const groups = BILLING_GROUPS.map((g) => ({ ...g, items: list.map((item, index) => ({ item, index })).filter(({ item }) => billingOf(item) === g.key) })).filter((g) => g.items.length);
-  return groups.map((g, i) => ({ ...g, ...discountedTotals(g.items.map((x) => x.item), i === 0 ? discountInput : 0) }));
+  const perGroup = discounts !== null && typeof discounts === "object";
+  return groups.map((g, i) => ({
+    ...g,
+    ...discountedTotals(
+      g.items.map((x) => x.item),
+      perGroup ? (discounts as Partial<Record<Billing, unknown>>)[g.key] : i === 0 ? discounts : 0,
+    ),
+  }));
 }
+
+/** Whether any line is billed this way (e.g. to show the discount box for monthly charges only when there are some). */
+export const hasBilling = (items: unknown, billing: Billing) => Array.isArray(items) && (items as LineItem[]).some((it) => billingOf(it) === billing);
 
 /** Flat fields saved on the record, so lists and reports can show each group without the items. */
 export function groupFields(groups: GroupTotals[]) {

@@ -1,8 +1,8 @@
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { FieldDefinition, LineItem } from "@/config/modules";
-import { groupedTotals } from "@/lib/lineItems";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { discountsOf, groupedTotals } from "@/lib/lineItems";
+import { asList, formatCurrency, formatDate } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 
 /** Shows one field of a record the way it should read in a table or detail view. */
@@ -17,6 +17,10 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
       const opt = field.options?.find((o) => o.value === value);
       return <Badge tone={opt?.tone}>{opt?.label ?? String(value)}</Badge>;
     }
+    case "multiselect": {
+      const list = asList(value);
+      return list.length ? <>{list.join(", ")}</> : empty;
+    }
     case "checkbox":
       return value ? <Check className="size-4 text-emerald-600" aria-label="Yes" /> : empty;
     case "items":
@@ -26,7 +30,7 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
     case "currency":
       if (field.display === "billingGroups" && Array.isArray(record.items) && record.items.length) {
         // One-time, yearly and monthly charges don't add up to one figure, so show each.
-        const groups = groupedTotals(record.items as LineItem[], record.discount);
+        const groups = groupedTotals(record.items as LineItem[], discountsOf(record));
         if (groups.length > 1 || groups[0]?.key !== "once")
           return (
             <span className="block space-y-0.5 tabular-nums whitespace-nowrap">

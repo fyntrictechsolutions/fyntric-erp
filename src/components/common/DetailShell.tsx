@@ -78,7 +78,7 @@ export function RecordFields({
   exclude?: string[];
 }) {
   const fields = module.fields.filter(
-    (f) => !f.hidden && f.type !== "items" && !exclude.includes(f.name) && !f.hiddenFor?.includes(role as Role),
+    (f) => !f.hidden && !f.createOnly && f.type !== "items" && !exclude.includes(f.name) && !f.hiddenFor?.includes(role as Role),
   );
   return (
     <DetailGrid

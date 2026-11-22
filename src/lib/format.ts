@@ -47,3 +47,9 @@ export function daysInclusive(from?: unknown, to?: unknown): number | undefined 
 export function monthOf(value: unknown): string {
   return typeof value === "string" ? value.slice(0, 7) : "";
 }
+
+/** Values of a multi-select field. Older records saved a single value as plain text. */
+export function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined && v !== "").map(String);
+  return value === null || value === undefined || value === "" ? [] : [String(value)];
+}
