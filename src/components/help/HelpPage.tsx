@@ -40,6 +40,15 @@ const GUIDE: Section[] = [
         ],
       },
       {
+        title: "Installing the app on your phone",
+        steps: [
+          "Android (Chrome): open the ERP, open the menu (☰) and tap Install app at the bottom, then Install. Or use Chrome's ⋮ menu → Install app / Add to Home screen.",
+          "iPhone: open the ERP in Safari, tap Share, then Add to Home Screen.",
+          "Computer (Chrome or Edge): click Install app at the bottom of the menu, or the install icon in the address bar.",
+          "The app opens from its own icon without the browser bar, and always shows live data. It needs an internet connection.",
+        ],
+      },
+      {
         title: "Finding your way around",
         steps: [
           "The menu on the left (the ☰ button on a phone) is grouped into HR, Sales, Delivery, Purchases, Finance and Insights.",

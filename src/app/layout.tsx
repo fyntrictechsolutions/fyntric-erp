@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: siteConfig.description,
   // Private business app: keep it out of search engines.
   robots: { index: false, follow: false },
+  // iPhone: opening from the home screen runs it full-screen like an app.
+  appleWebApp: { capable: true, title: "Fyntric ERP", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { NAVIGATION, navVisible } from "@/config/navigation";
+import { InstallApp } from "./InstallApp";
 import { cn } from "@/lib/cn";
 import { Logo } from "./Logo";
 
@@ -52,6 +53,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             </ul>
           </div>
         ))}
+      </div>
+      <div className="border-t border-line px-3 py-3 empty:hidden">
+        <InstallApp />
       </div>
     </nav>
   );
