@@ -23,6 +23,7 @@ export type FieldType =
   | "time"
   | "textarea"
   | "select"
+  | "multiselect"
   | "checkbox"
   | "reference"
   | "items";
@@ -75,6 +76,13 @@ export interface FieldDefinition {
   max?: number;
   /** Takes the full row in the two-column form. */
   wide?: boolean;
+  /**
+   * Asked only when adding a record, and not saved on it: the value goes to the module's `afterCreate`
+   * (e.g. the first call's summary typed into the new-lead form).
+   */
+  createOnly?: boolean;
+  /** Select fields: people who can edit the record change it straight from the list and detail page, without opening the form. */
+  quickEdit?: boolean;
 }
 
 /** One row of an "items" field (estimate lines). */
@@ -159,6 +167,8 @@ export interface ModuleDefinition {
   detailHref?: (id: string) => string;
   /** Checks the form before saving; return a message to stop the save. `record` is the saved version when editing. */
   validate?: (values: Record<string, unknown>, record?: BaseRecord) => string | null | Promise<string | null>;
+  /** Adjusts a saved record before it goes into the edit form (e.g. older data moved into newer fields). */
+  toForm?: (record: BaseRecord) => Record<string, unknown>;
   /** Fill in computed fields before saving. */
   beforeSave?: (data: Record<string, unknown>, ctx: FormContext) => Record<string, unknown>;
   /** Runs after a new record is saved (e.g. schedule a lead's first call). */

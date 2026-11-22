@@ -222,7 +222,7 @@ function SalaryForm({ employee, existing, revise, onClose }: { employee: BaseRec
             {rows.map((r, i) => (
               <li key={i} className="flex gap-2">
                 <input list="salary-components" className={inputClasses} value={r.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="Component" aria-label="Component name" />
-                <input type="number" min={0} step="any" className={cn(inputClasses, "w-40 text-right")} value={r.amount || ""} onChange={(e) => update(i, { amount: Number(e.target.value) })} placeholder="0" aria-label="Amount" />
+                <input type="number" min={0} step="any" className={cn(inputClasses, "!w-40 text-right")} value={r.amount || ""} onChange={(e) => update(i, { amount: Number(e.target.value) })} placeholder="0" aria-label="Amount" />
                 <button type="button" onClick={() => setRows((x) => x.filter((_, j) => j !== i))} className="rounded-lg px-2 text-subtle hover:text-red-600" aria-label="Remove component">
                   <X className="size-4" />
                 </button>

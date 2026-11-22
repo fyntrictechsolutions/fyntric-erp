@@ -1,4 +1,4 @@
-import { BarChart3, History, Images, LayoutDashboard, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
+import { BarChart3, Banknote, History, Images, LayoutDashboard, LifeBuoy, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import { MODULES } from "@/config/modules";
 import { canRead, INTERNAL_ROLES, type ModuleKey, type Role } from "@/config/roles";
 
@@ -32,6 +32,7 @@ export const NAVIGATION: NavSection[] = [
       moduleItem("attendance", { roles: INTERNAL_ROLES }),
       moduleItem("leave", { roles: INTERNAL_ROLES }),
       moduleItem("candidates"),
+      { label: "Payroll", href: "/hr/payroll", icon: Banknote, module: "payroll" },
     ],
   },
   { title: "Sales", items: [moduleItem("leads"), moduleItem("estimates"), moduleItem("clients"), moduleItem("products"), { label: "Gallery", href: "/crm/gallery", icon: Images, module: "salesGallery" }] },
@@ -47,6 +48,7 @@ export const NAVIGATION: NavSection[] = [
       { label: "Settings", href: "/settings", icon: Settings, module: "settings" },
     ],
   },
+  { items: [{ label: "Help & support", href: "/help", icon: LifeBuoy }] },
 ];
 
 export function navVisible(item: NavItem, role: Role | "pending"): boolean {

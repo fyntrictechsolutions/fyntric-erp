@@ -3,8 +3,7 @@
 import { FileBarChart, Printer } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import Image from "next/image";
-import logoColor from "@/assets/brand/logo-color.png";
+import { CompanyLogo } from "@/components/common/CompanyLogo";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound } from "@/components/common/DetailShell";
 import { NoAccess } from "@/components/resource/ModulePage";
@@ -104,7 +103,7 @@ function Report({ id, month }: { id: string; month: string }) {
       <article className="print-sheet mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-card sm:p-10">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Image src={logoColor} alt={settings.business.name} className="h-9 w-auto" sizes="200px" />
+            <CompanyLogo className="h-9" />
             <p className="mt-2 text-sm text-slate-600">{settings.business.name}</p>
           </div>
           <div className="sm:text-right">

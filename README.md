@@ -101,6 +101,20 @@ Sales > Gallery keeps photos, PDFs, videos and audio in Firebase Storage, which 
 
 Thumbnails are made in the browser while uploading (a resized photo, a video frame, the first page of a PDF, a waveform for audio) and stored next to each file, so the grid stays light. Each file is either **public** (its link can be shared with clients) or **private** (only shown inside the app). Making a public file private moves it, so the link already shared stops working. Limits per file: 25 MB for images, PDFs and documents, 200 MB for video and audio (also enforced by `storage.rules`).
 
+### 6. Emailing payslips (optional)
+
+HR > Payroll can email each payslip PDF to the employee. It sends through an SMTP mailbox, for example a Google Workspace account with an [app password](https://support.google.com/accounts/answer/185833). In Vercel, add these environment variables and redeploy:
+
+| Variable | Example |
+| --- | --- |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `payroll@fyntrictech.co.in` |
+| `SMTP_PASS` | the app password (mark it Sensitive) |
+| `SMTP_FROM` | `Fyntric Tech <payroll@fyntrictech.co.in>` (optional) |
+
+Until these are set, **Email to employee** downloads the PDF and opens an email draft to attach it to. Only admins and HR managers can send: `/api/payslip-email` checks the caller's Firebase sign-in and role.
+
 ## Local development
 
 ```bash

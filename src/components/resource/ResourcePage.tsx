@@ -20,6 +20,7 @@ import { cn } from "@/lib/cn";
 import { deleteRecord, updateRecord } from "@/lib/records";
 import type { BaseRecord } from "@/types";
 import { FieldValue } from "./FieldValue";
+import { QuickSelect } from "./QuickSelect";
 import { optionsFor } from "./RecordForm";
 import { friendlyError, RecordEditor } from "./RecordEditor";
 
@@ -180,7 +181,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
                       {showOwner && <td className="px-4 py-3 font-medium text-foreground">{r.userName ?? "—"}</td>}
                       {columns.map((c, i) => (
                         <td key={c.key} className={cn("max-w-xs px-4 py-3", i === 0 && !showOwner && "font-medium text-foreground")}>
-                          <ColumnCell column={c} record={r} href={i === 0 && module.detailHref ? module.detailHref(r.id) : undefined} />
+                          <ColumnCell column={c} record={r} href={i === 0 && module.detailHref ? module.detailHref(r.id) : undefined} quick={access.canEdit(r) ? module : undefined} />
                         </td>
                       ))}
                       <td className="px-4 py-3">
@@ -208,7 +209,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
                     {columns.slice(1).map((c) => (
                       <div key={c.key} className="min-w-0">
                         <dt className="text-xs text-subtle">{c.label}</dt>
-                        <dd className="truncate"><ColumnCell column={c} record={r} /></dd>
+                        <dd className="truncate"><ColumnCell column={c} record={r} quick={access.canEdit(r) ? module : undefined} /></dd>
                       </div>
                     ))}
                   </dl>
@@ -307,10 +308,12 @@ function shorten(text: string) {
 }
 
 /** One table cell: a single field, or several stacked (empty ones skipped). */
-function ColumnCell({ column, record, href }: { column: Column; record: BaseRecord; href?: string }) {
+function ColumnCell({ column, record, href, quick }: { column: Column; record: BaseRecord; href?: string; quick?: ModuleDefinition }) {
   const [first, ...rest] = column.fields;
   const value = (f: FieldDefinition) =>
-    f.shortenMiddle && typeof record[f.name] === "string" ? (
+    quick && f.quickEdit ? (
+      <QuickSelect module={quick} field={f} record={record} />
+    ) : f.shortenMiddle && typeof record[f.name] === "string" ? (
       <span title={String(record[f.name])} className="whitespace-nowrap">{shorten(String(record[f.name]))}</span>
     ) : (
       <FieldValue field={f} record={record} />

@@ -180,6 +180,15 @@ service cloud.firestore {
       allow read, write: if hasRole(['admin', 'hr_manager']);
     }
 
+    // Payslips, one per employee per month. People see their own once paid.
+    match /payroll/{id} {
+      allow read: if hasRole(['admin', 'hr_manager'])
+        || (internal() && resource.data.accountId == request.auth.uid && resource.data.status == 'paid');
+      allow create: if hasRole(['admin', 'hr_manager']) && createsOwn();
+      allow update: if hasRole(['admin', 'hr_manager']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'hr_manager']);
+    }
+
     match /exits/{employeeId} {
       allow read, write: if hasRole(['admin', 'hr_manager']);
     }
@@ -273,7 +282,7 @@ service cloud.firestore {
     // Finance
 
     match /invoices/{id} {
-      allow read: if hasRole(['admin', 'sales', 'project_manager', 'investor', 'viewer']) || isMyClientRecord();
+      allow read: if hasRole(['admin', 'sales', 'project_manager', 'hr_manager', 'investor', 'viewer']) || isMyClientRecord();
       allow create: if hasRole(['admin', 'sales']) && createsOwn();
       allow update: if hasRole(['admin', 'sales']) && keepsOwner();
       allow delete: if role() == 'admin';
@@ -291,18 +300,29 @@ service cloud.firestore {
     }
 
     match /expenses/{id} {
-      allow read: if hasRole(['admin', 'investor', 'viewer']) || (internal() && isOwner());
+      allow read: if hasRole(['admin', 'investor', 'viewer']) || (internal() && isOwner())
+        || (role() == 'hr_manager' && resource.data.source == 'payroll');
       allow create: if createsOwn() && (
         role() == 'admin'
         || (internal() && request.resource.data.status == 'pending')
+        || (role() == 'hr_manager' && isPayrollExpense(id))
       );
-      allow update: if keepsOwner() && (
+      allow update: if (keepsOwner() && (
         role() == 'admin'
         || (internal() && isOwner() && resource.data.status == 'pending'
             && request.resource.data.status == 'pending')
-      );
+      ))
+        // HR's payroll keeps one "Salaries" expense per month in step with the paid payslips.
+        || (role() == 'hr_manager' && resource.data.source == 'payroll' && isPayrollExpense(id));
       allow delete: if role() == 'admin'
-        || (internal() && isOwner() && resource.data.status == 'pending');
+        || (internal() && isOwner() && resource.data.status == 'pending')
+        || (role() == 'hr_manager' && resource.data.source == 'payroll');
+    }
+
+    function isPayrollExpense(id) {
+      return request.resource.data.source == 'payroll'
+        && request.resource.data.category == 'Salaries'
+        && id == 'payroll-' + request.resource.data.month;
     }
 
     // Anything not listed above is closed.

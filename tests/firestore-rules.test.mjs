@@ -111,6 +111,38 @@ describe("hiring, salaries and exits", () => {
   });
 });
 
+describe("payroll", () => {
+  const slip = (uid, accountId, status = "draft") => ({ employeeId: "emp1", month: "2026-11", accountId, status, gross: 1000, net: 900, userId: uid });
+  test("HR and admin prepare payslips; staff can't", async () => {
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "payroll", "emp1_2026-11"), slip(users.hr_manager.uid, users.staff.uid))), true);
+    assert.equal(await allowed(setDoc(doc(users.staff.db, "payroll", "emp2_2026-11"), slip(users.staff.uid, users.staff.uid))), false);
+    assert.equal(await allowed(setDoc(doc(users.admin.db, "payroll", "emp3_2026-11"), slip(users.admin.uid, users.sales.uid, "paid"))), true);
+  });
+  test("people see only their own payslips, and only once paid", async () => {
+    assert.equal(await allowed(getDoc(doc(users.staff.db, "payroll", "emp1_2026-11"))), false);
+    await updateDoc(doc(users.hr_manager.db, "payroll", "emp1_2026-11"), { status: "paid" });
+    assert.equal(await allowed(getDoc(doc(users.staff.db, "payroll", "emp1_2026-11"))), true);
+    assert.equal(await allowed(getDoc(doc(users.sales.db, "payroll", "emp1_2026-11"))), false);
+    assert.equal(await allowed(getDocs(query(collection(users.staff.db, "payroll"), where("accountId", "==", users.staff.uid), where("status", "==", "paid")))), true);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "payroll"))), false);
+    assert.equal(await allowed(getDocs(collection(users.investor.db, "payroll"))), false);
+  });
+  test("HR keeps the monthly Salaries expense, but can't add other expenses as approved", async () => {
+    const exp = (uid) => ({ source: "payroll", month: "2026-11", category: "Salaries", amount: 1000, status: "reimbursed", userId: uid });
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "expenses", "payroll-2026-11"), exp(users.hr_manager.uid))), true);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "expenses", "payroll-2026-11"), { ...exp(users.hr_manager.uid), amount: 2000 })), true);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "expenses", "payroll-2026-12"), { ...exp(users.hr_manager.uid) })), false);
+    assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "expenses", "x1"), { ...exp(users.hr_manager.uid), source: "other" })), false);
+    assert.equal(await allowed(updateDoc(doc(users.hr_manager.db, "expenses", "e1"), { status: "approved" })), false);
+    assert.equal(await allowed(getDoc(doc(users.investor.db, "expenses", "payroll-2026-11"))), true);
+    assert.equal(await allowed(deleteDoc(doc(users.hr_manager.db, "expenses", "payroll-2026-11"))), true);
+  });
+  test("HR reads invoices to work out commission, but can't change them", async () => {
+    assert.equal(await allowed(getDocs(query(collection(users.hr_manager.db, "invoices"), where("userId", "==", users.sales.uid)))), true);
+    assert.equal(await allowed(updateDoc(doc(users.hr_manager.db, "invoices", "i1"), { total: 1 })), false);
+  });
+});
+
 describe("activity log", () => {
   const entry = (uid, extra = {}) => ({ action: "update", module: "leads", changes: [], userId: uid, at: serverTimestamp(), ...extra });
   test("anyone signed in adds entries for themselves, with the server's time", async () => {

@@ -1,11 +1,13 @@
 "use client";
 
-import { CalendarClock, FileSignature, Handshake, MessageCircle, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { Building2, CalendarClock, FileSignature, Handshake, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
-import { BackLink, Loading, NotFound, RecordFields, WithRecordId } from "@/components/common/DetailShell";
+import { BackLink, Loading, NotFound, WithRecordId } from "@/components/common/DetailShell";
+import { FieldValue } from "@/components/resource/FieldValue";
+import { QuickSelect } from "@/components/resource/QuickSelect";
 import { NoAccess } from "@/components/resource/ModulePage";
 import { friendlyError, RecordEditor } from "@/components/resource/RecordEditor";
 import { useSettings } from "@/components/settings/SettingsProvider";
@@ -20,7 +22,7 @@ import { canRead } from "@/config/roles";
 import { useRecord, useRecordsWhere } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
 import { deleteRecord } from "@/lib/records";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { asList, formatCurrency, formatDate } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 
 export function LeadDetailPage() {
@@ -67,7 +69,8 @@ function LeadDetail({ id }: { id: string }) {
   const leadAccess = moduleAccess(leadsModule, profile);
   const fuAccess = moduleAccess(followupsModule, profile);
   const estAccess = moduleAccess(estimatesModule, profile);
-  const stage = leadsModule.fields.find((f) => f.name === "stage")!.options!.find((o) => o.value === lead.stage);
+  const stageField = leadsModule.fields.find((f) => f.name === "stage")!;
+  const stage = stageField.options!.find((o) => o.value === lead.stage);
   const wa = whatsappLink(lead.phone);
   const close = () => setEditing(null);
   const convert = leadsModule.actions?.find((a) => a.label === "Convert to client");
@@ -107,18 +110,22 @@ function LeadDetail({ id }: { id: string }) {
       <BackLink href="/crm/leads" label="All leads" />
       <PageHeader
         title={String(lead.name ?? "Lead")}
-        description={[lead.company, lead.service].filter(Boolean).join(" · ") || undefined}
+        description={[lead.company, asList(lead.service).join(", ")].filter(Boolean).join(" · ") || undefined}
         actions={
           <>
-            {stage && <Badge tone={stage.tone}>{stage.label}</Badge>}
+            {leadAccess.canEdit(lead) ? (
+              <QuickSelect module={leadsModule} field={stageField} record={lead} className="h-9 [&_select]:h-9 [&_select]:pl-3.5 [&_select]:text-sm" />
+            ) : (
+              stage && <Badge tone={stage.tone}>{stage.label}</Badge>
+            )}
             {typeof lead.phone === "string" && lead.phone && (
-              <a href={`tel:${lead.phone}`} className={buttonClasses("secondary", "md")}>
-                <Phone className="size-4" /> Call
+              <a href={`tel:${lead.phone}`} aria-label="Call" title="Call" className={buttonClasses("secondary", "md")}>
+                <Phone className="size-4" /> <span className="hidden sm:inline">Call</span>
               </a>
             )}
             {wa && (
-              <a href={wa} target="_blank" rel="noreferrer" className={buttonClasses("secondary", "md")}>
-                <MessageCircle className="size-4" /> WhatsApp
+              <a href={wa} target="_blank" rel="noreferrer" aria-label="WhatsApp" title="WhatsApp" className={buttonClasses("secondary", "md")}>
+                <MessageCircle className="size-4" /> <span className="hidden sm:inline">WhatsApp</span>
               </a>
             )}
             {canConvert && (
@@ -127,8 +134,8 @@ function LeadDetail({ id }: { id: string }) {
               </Button>
             )}
             {leadAccess.canDelete(lead) && (
-              <Button variant="danger" onClick={() => void doDelete()} disabled={busy}>
-                <Trash2 className="size-4" /> Delete
+              <Button variant="danger" onClick={() => void doDelete()} disabled={busy} aria-label="Delete lead" title="Delete">
+                <Trash2 className="size-4" /> <span className="hidden sm:inline">Delete</span>
               </Button>
             )}
             {leadAccess.canEdit(lead) && (
@@ -146,13 +153,7 @@ function LeadDetail({ id }: { id: string }) {
           Converted to client <Link href="/crm/clients" className="font-medium underline">{String(lead.clientIdLabel ?? "")}</Link>.
         </p>
       )}
-      <Card className="p-5 sm:p-6">
-        <h2 className="mb-4 font-display text-base font-semibold text-foreground">Basic details</h2>
-        <RecordFields module={leadsModule} record={lead} role={profile.role} />
-        <p className="mt-4 text-xs text-subtle">
-          Added by {String(lead.userName ?? "—")} on {formatDate(lead.createdAt)}
-        </p>
-      </Card>
+      <BasicDetails lead={lead} role={profile.role} />
 
       <Card className="mt-6 overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
@@ -236,6 +237,58 @@ function LeadDetail({ id }: { id: string }) {
         <RecordEditor module={estimatesModule} record={null} preset={{ leadId: lead.id, leadIdLabel: lead.name }} onClose={close} />
       )}
     </div>
+  );
+}
+
+const isEmptyValue = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
+const CONTACT_FIELDS = ["name", "company", "email", "phone", "address", "stage"];
+
+/** Contact lines without labels (they speak for themselves), then the other fields in a tight grid. */
+function BasicDetails({ lead, role }: { lead: BaseRecord; role: string }) {
+  const str = (k: string) => (typeof lead[k] === "string" && lead[k] ? (lead[k] as string) : "");
+  const contact = [
+    { icon: Building2, text: str("company") },
+    { icon: Phone, text: str("phone"), href: str("phone") && `tel:${str("phone")}` },
+    { icon: Mail, text: str("email"), href: str("email") && `mailto:${str("email")}` },
+    { icon: MapPin, text: str("address"), wide: true },
+  ].filter((c) => c.text);
+  // Empty fields are left out, and short ones come first so they pair up two to a row on phones.
+  const isWide = (f: (typeof leadsModule.fields)[number]) => f.type === "textarea" || f.type === "multiselect";
+  const others = leadsModule.fields
+    .filter((f) => !f.hidden && !f.createOnly && !CONTACT_FIELDS.includes(f.name) && !f.hiddenFor?.includes(role as never))
+    .filter((f) => !isEmptyValue(lead[f.name]))
+    .sort((a, b) => Number(isWide(a)) - Number(isWide(b)));
+  return (
+    <Card className="p-4 sm:p-5">
+      <h2 className="sr-only">Basic details</h2>
+      <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm text-foreground sm:grid-cols-2 lg:grid-cols-3">
+        {contact.map(({ icon: Icon, text, href, wide }) => (
+          <li key={text} className={wide ? "flex gap-2 sm:col-span-2 lg:col-span-3" : "flex min-w-0 gap-2"}>
+            <Icon className="mt-0.5 size-4 shrink-0 text-subtle" aria-hidden />
+            {href ? (
+              <a href={href} className="truncate hover:text-accent hover:underline">{text}</a>
+            ) : (
+              <span className={wide ? "whitespace-pre-line" : "truncate"}>{text}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {others.length > 0 && <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 sm:grid-cols-3 lg:grid-cols-4">
+        {others.map((f) => {
+          const wide = isWide(f);
+          return (
+            <div key={f.name} className={wide ? "col-span-2 sm:col-span-3 lg:col-span-4" : "min-w-0"}>
+              <dt className="text-[11px] font-medium tracking-wide text-subtle uppercase">{f.label}</dt>
+              <dd className="text-sm whitespace-pre-line text-foreground"><FieldValue field={f} record={lead} /></dd>
+            </div>
+          );
+        })}
+      </dl>}
+      <p className="mt-3 text-xs text-subtle">
+        Added by {String(lead.userName ?? "—")} on {formatDate(lead.createdAt)}
+      </p>
+    </Card>
   );
 }
 

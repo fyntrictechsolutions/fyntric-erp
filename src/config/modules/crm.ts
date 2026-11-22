@@ -14,8 +14,10 @@ export const leadsModule: ModuleDefinition = {
   href: "/crm/leads",
   ownerLabel: "Added by",
   detailHref: (id) => `/crm/leads/view?id=${id}`,
-  // Every new lead starts with an introduction call at the moment it was added.
+  // Every new lead starts with an introduction call at the moment it was added. A summary typed into
+  // the new-lead form means that call already happened.
   afterCreate: async (id, data, { profile }) => {
+    const summary = typeof data.firstCallSummary === "string" ? data.firstCallSummary.trim() : "";
     await createRecord(
       "followups",
       {
@@ -25,7 +27,8 @@ export const leadsModule: ModuleDefinition = {
         time: nowTime(),
         mode: "Phone call",
         goal: "Introduction Call",
-        status: "scheduled",
+        status: summary ? "done" : "scheduled",
+        summary: summary || null,
         isFirstCall: true,
       },
       profile,
@@ -41,7 +44,7 @@ export const leadsModule: ModuleDefinition = {
     { name: "phone", label: "Phone / WhatsApp", type: "tel" },
     { name: "address", label: "Address", type: "textarea", wide: true },
     { name: "source", label: "Source", type: "select", list: "leadSources" },
-    { name: "service", label: "Service interested in", type: "select", list: "services" },
+    { name: "service", label: "Services interested in", type: "multiselect", list: "services", wide: true, help: "Pick one or more." },
     { name: "estimatedValue", label: "Estimated value", type: "currency" },
     {
       name: "stage",
@@ -57,8 +60,17 @@ export const leadsModule: ModuleDefinition = {
         { value: "won", label: "Won", tone: "green" },
         { value: "lost", label: "Lost", tone: "red" },
       ],
+      quickEdit: true,
     },
     { name: "notes", label: "Notes", type: "textarea", wide: true },
+    {
+      name: "firstCallSummary",
+      label: "Summary of discussion",
+      type: "textarea",
+      wide: true,
+      createOnly: true,
+      help: "What you talked about in the first call. It's saved on the lead's first call in the follow-up list.",
+    },
   ],
   actions: [
     {
