@@ -81,7 +81,7 @@ export function Dashboard() {
       {reviewsLeave && <NewResignations />}
       {permissionFor(profile.role, "recurring").update !== "none" && <DueForBilling />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {projects.allowed && (
           <StatCard label="Active projects" value={String(stats.activeProjects.length)} hint={`${projects.data.length} in total`} icon={FolderKanban} href="/projects" loading={projects.loading} />
         )}
