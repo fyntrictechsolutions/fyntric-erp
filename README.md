@@ -70,15 +70,27 @@ Run the deploy again whenever `firestore.rules` changes.
 
 ### 2b. Rules publish themselves (optional, recommended)
 
-`.github/workflows/deploy-rules.yml` tests `firestore.rules` and `storage.rules` in the emulators and publishes them whenever they change on `main`, so nobody has to paste them into the console. One-time setup:
+`.github/workflows/deploy-rules.yml` tests `firestore.rules` and `storage.rules` in the emulators and publishes them whenever they change on `main`, so nobody has to paste them into the console. It signs in to Google with Workload Identity Federation, so there is no key to store or leak; Google trusts only the `main` branch of this repo. One-time setup (already done for `fyntric-erp`):
 
 1. Google Cloud console → **IAM & Admin → Service accounts** (project `fyntric-erp`) → **Create service account**, name it `github-rules-deploy`.
 2. Give it three roles, nothing broader: **Firebase Rules Admin**, **Firebase Viewer** and **Service Usage Consumer**. Then **Done**.
-3. Open the account → **Keys → Add key → Create new key → JSON**. A file downloads.
-4. GitHub → the repo → **Settings → Secrets and variables → Actions → New repository secret**: name `FIREBASE_SERVICE_ACCOUNT`, value = the whole JSON file. Then delete the downloaded file.
-5. Run it once by hand: **Actions → Deploy Firebase rules → Run workflow**.
+3. Open **Cloud Shell** (the `>_` button) and run:
 
-If your organisation blocks key creation (policy `iam.disableServiceAccountKeyCreation`), an organisation admin can allow it for this project.
+   ```sh
+   PROJECT=fyntric-erp
+   REPO=fyntrictechsolutions/fyntric-erp
+   SA=github-rules-deploy@$PROJECT.iam.gserviceaccount.com
+   gcloud config set project $PROJECT
+   NUM=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+   gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+   gcloud iam workload-identity-pools create github --location=global --display-name=GitHub
+   gcloud iam workload-identity-pools providers create-oidc github-repo --location=global --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" --attribute-condition="assertion.repository=='$REPO' && assertion.ref=='refs/heads/main'"
+   gcloud iam service-accounts add-iam-policy-binding $SA --role=roles/iam.workloadIdentityUser --member="principalSet://iam.googleapis.com/projects/$NUM/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+   echo "projects/$NUM/locations/global/workloadIdentityPools/github/providers/github-repo"
+   ```
+
+4. Put the printed `projects/…` line in `WIF_PROVIDER` at the top of the workflow (it is not a secret).
+5. Run it once by hand: **Actions → Deploy Firebase rules → Run workflow**.
 
 ### 3. Vercel (free)
 
