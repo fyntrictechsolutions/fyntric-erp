@@ -37,7 +37,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: "Runs the company account: everything, including users, settings, purchases and payments.",
   project_manager: "Owns projects and timesheets, edits attendance, and can see sales and finance for delivery.",
-  hr_manager: "Runs hiring, salaries, resignations and leave approvals, and sees the team's employee records and attendance.",
+  hr_manager: "Runs hiring, salaries, payroll, resignations and leave approvals, and sees the team's employee records and attendance.",
   sales: "Works leads, follow-ups, estimates, clients and invoices, and records payments received.",
   staff: "Checks in, applies for leave, logs timesheets and claims expenses.",
   client: "Sees only their own company's projects and invoices.",
@@ -57,6 +57,7 @@ export type ModuleKey =
   | "leave"
   | "candidates"
   | "salaries"
+  | "payroll"
   | "exits"
   | "leads"
   | "followups"
@@ -141,6 +142,8 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
   // Hiring, pay and exits are HR's own work: Admin and HR Manager only.
   candidates: row({ hr_manager: FULL }),
   salaries: row({ hr_manager: FULL }),
+  // HR runs payroll; everyone on the team sees their own paid payslips (matched on the payslip's accountId).
+  payroll: row({ ...staffWide({ read: "own", create: false, update: "none", delete: "none" }), hr_manager: FULL }),
   exits: row({ hr_manager: FULL }),
 
   // Sales
@@ -163,6 +166,8 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
   // Finance
   invoices: row({
     sales: { read: "all", create: true, update: "all", delete: "none" },
+    // To work out sales commission on payroll.
+    hr_manager: READ_ALL,
     project_manager: READ_ALL,
     client: CLIENT_READ,
     investor: READ_ALL,
@@ -186,6 +191,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   leave: "Leave",
   candidates: "Hiring (candidates)",
   salaries: "Salary structure",
+  payroll: "Payroll",
   exits: "Resignations",
   leads: "Leads",
   followups: "Lead follow-ups",

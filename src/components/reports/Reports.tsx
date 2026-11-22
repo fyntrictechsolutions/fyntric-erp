@@ -518,7 +518,7 @@ function Wages({ data, fy }: { data: Data; fy: number }) {
       />
       <Table
         title="Wages by month"
-        note={'From expenses in the "Salaries" category. Add each month\'s salary payments as an expense with that category.'}
+        note={'From expenses in the "Salaries" category. Payslips marked paid in HR → Payroll are added there automatically, dated the day they were paid.'}
         cols={[{ label: "Month" }]}
         rows={months.map((m) => [<Bar key={m} label={monthName(m)} value={byMonth.get(m) ?? 0} max={max} text={money(byMonth.get(m) ?? 0)} />])}
         foot={[`Total ${money(total)}`]}
