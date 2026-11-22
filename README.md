@@ -68,6 +68,18 @@ npx firebase deploy --only firestore:rules --project <your-firebase-project-id>
 
 Run the deploy again whenever `firestore.rules` changes.
 
+### 2b. Rules publish themselves (optional, recommended)
+
+`.github/workflows/deploy-rules.yml` tests `firestore.rules` and `storage.rules` in the emulators and publishes them whenever they change on `main`, so nobody has to paste them into the console. One-time setup:
+
+1. Google Cloud console → **IAM & Admin → Service accounts** (project `fyntric-erp`) → **Create service account**, name it `github-rules-deploy`.
+2. Give it three roles, nothing broader: **Firebase Rules Admin**, **Firebase Viewer** and **Service Usage Consumer**. Then **Done**.
+3. Open the account → **Keys → Add key → Create new key → JSON**. A file downloads.
+4. GitHub → the repo → **Settings → Secrets and variables → Actions → New repository secret**: name `FIREBASE_SERVICE_ACCOUNT`, value = the whole JSON file. Then delete the downloaded file.
+5. Run it once by hand: **Actions → Deploy Firebase rules → Run workflow**.
+
+If your organisation blocks key creation (policy `iam.disableServiceAccountKeyCreation`), an organisation admin can allow it for this project.
+
 ### 3. Vercel (free)
 
 1. On <https://vercel.com/new>, import the `fyntric-erp` GitHub repo (framework: Next.js, no other settings needed).
