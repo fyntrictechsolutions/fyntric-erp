@@ -22,28 +22,8 @@ import { useRecord } from "@/hooks/useCollection";
 import { db } from "@/lib/firebase";
 import { formatDate, todayISO } from "@/lib/format";
 import { updateRecord } from "@/lib/records";
+import { isCoolingOff, type ChecklistItem, type ExitDoc } from "@/lib/resignation";
 import type { BaseRecord } from "@/types";
-
-interface ChecklistItem {
-  item: string;
-  done: boolean;
-}
-
-/** Stored at exits/{employeeId}. */
-interface ExitDoc extends BaseRecord {
-  status?: "requested" | "processing" | "completed" | "withdrawn";
-  receivedOn?: string;
-  reason?: string;
-  requestedLastDay?: string;
-  noticePeriodDays?: number;
-  lastWorkingDay?: string;
-  exitInterviewerId?: string | null;
-  exitInterviewerIdLabel?: string | null;
-  exitInterviewDate?: string;
-  exitInterviewTime?: string;
-  checklist?: ChecklistItem[];
-  processedBy?: string;
-}
 
 const STATUS: Record<NonNullable<ExitDoc["status"]>, { label: string; tone: Tone }> = {
   requested: { label: "Resignation received", tone: "amber" },
@@ -56,7 +36,9 @@ const INTERVIEWER: FieldDefinition = { name: "exitInterviewerId", label: "Exit i
 
 export function ExitTab({ employee }: { employee: BaseRecord }) {
   const profile = useProfile();
-  const { data: exit, loading } = useRecord<ExitDoc>("exits", employee.id);
+  const { data: stored, loading } = useRecord<ExitDoc>("exits", employee.id);
+  // One the employee submitted is private to them for its first 24 hours.
+  const exit = isCoolingOff(stored) ? null : stored;
   const [form, setForm] = useState<"record" | "process" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const canEdit = permissionFor(profile.role, "exits").update === "all";
@@ -77,11 +59,15 @@ export function ExitTab({ employee }: { employee: BaseRecord }) {
   if (!exit || exit.status === "withdrawn") {
     return (
       <Card className="p-5 sm:p-6">
-        {exit?.status === "withdrawn" && <p className="mb-4 text-sm text-muted">An earlier resignation (received {formatDate(exit.receivedOn)}) was withdrawn.</p>}
+        {exit?.status === "withdrawn" && (
+          <p className="mb-4 text-sm text-muted">
+            An earlier resignation (received {formatDate(exit.receivedOn)}) was withdrawn{exit.withdrawnBy ? ` by ${exit.withdrawnBy}` : ""}{exit.withdrawnOn ? ` on ${formatDate(exit.withdrawnOn)}` : ""}.
+          </p>
+        )}
         <EmptyState
           icon={LogOut}
           title="No resignation"
-          description="How team members will submit resignations is still to be decided. For now, HR can record one received by email or letter."
+          description="Team members resign from Help & support → Leaving the company, and it shows up here. HR can also record one received by email or letter."
           action={canEdit ? <Button onClick={() => setForm("record")}><Plus className="size-4" /> Record resignation</Button> : undefined}
         />
         {form === "record" && <RecordForm employee={employee} onClose={() => setForm(null)} />}
@@ -129,7 +115,7 @@ export function ExitTab({ employee }: { employee: BaseRecord }) {
           items={[
             { label: "Received on", value: formatDate(exit.receivedOn) },
             { label: "Last day they asked for", value: formatDate(exit.requestedLastDay) },
-            { label: "Recorded by", value: String(exit.userName ?? "—") },
+            { label: exit.source === "self" ? "Submitted" : "Recorded by", value: exit.source === "self" ? "By the employee, in the app" : String(exit.userName ?? "—") },
             { label: "Reason", value: <span className="whitespace-pre-line">{exit.reason || "—"}</span>, wide: true },
           ]}
         />
