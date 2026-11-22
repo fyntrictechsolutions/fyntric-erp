@@ -1,8 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import nodemailer from "nodemailer";
 
-export const runtime = "nodejs";
-
 const JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 const MAX_PDF_BYTES = 3 * 1024 * 1024;
 

@@ -20,6 +20,9 @@ export interface BusinessSettings {
   ifsc: string;
   /** Company logo as a small PNG/JPEG data URL, printed on estimates, invoices, letters and payslips. */
   logo: string;
+  /** Who the team contacts for help with the app (Help & support page). */
+  supportPhone: string;
+  supportEmail: string;
 }
 
 export interface Holiday {
@@ -95,6 +98,8 @@ export const DEFAULT_BUSINESS: BusinessSettings = {
   accountNumber: "",
   ifsc: "",
   logo: "",
+  supportPhone: "+91 99957 15997",
+  supportEmail: "info@fyntrictech.co.in",
 };
 
 /** Kerala government public holidays 2026 (source: Onmanorama, 29 Oct 2025; moon-dependent dates may move). */

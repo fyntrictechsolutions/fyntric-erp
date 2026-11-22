@@ -103,7 +103,7 @@ function PayslipView({ id }: { id: string }) {
         return;
       }
       const reason = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
-      if (res?.status === 503 || !res) {
+      if (!res || res.status === 503 || res.status === 404) {
         // No mail server set up: hand over the PDF and an email draft to attach it to.
         download(pdf, payslipFileName(slip));
         window.location.href = mailHref(slip.email, subject, `${text}\n\n(Payslip PDF attached.)`);

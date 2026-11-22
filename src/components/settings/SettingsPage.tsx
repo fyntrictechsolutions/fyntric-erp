@@ -125,6 +125,8 @@ const BUSINESS_FIELDS: { key: keyof BusinessSettings; label: string; placeholder
   { key: "accountName", label: "Account name" },
   { key: "accountNumber", label: "Account number" },
   { key: "ifsc", label: "IFSC" },
+  { key: "supportPhone", label: "Helpline number", help: "Shown on the Help & support page." },
+  { key: "supportEmail", label: "Support email", help: "Shown on the Help & support page." },
 ];
 
 function BusinessTab({ onState }: { onState: (s: SaveState) => void }) {
@@ -540,13 +542,13 @@ function CommissionCard({ values, set }: { values: AppValues; set: SetApp }) {
                   aria-label={`Slab ${i + 1} up to`}
                   type="number"
                   min={from + 1}
-                  className={cn(inputClasses, "w-36")}
+                  className={cn(inputClasses, "!w-36")}
                   value={sl.upTo ?? ""}
                   onChange={(e) => update(i, { upTo: e.target.value === "" ? 0 : Number(e.target.value) })}
                 />
               )}
               <span className="text-muted">earns</span>
-              <input aria-label={`Slab ${i + 1} rate`} type="number" min={0} max={100} step={0.1} className={cn(inputClasses, "w-24")} value={sl.rate} onChange={(e) => update(i, { rate: Number(e.target.value) || 0 })} />
+              <input aria-label={`Slab ${i + 1} rate`} type="number" min={0} max={100} step={0.1} className={cn(inputClasses, "!w-24")} value={sl.rate} onChange={(e) => update(i, { rate: Number(e.target.value) || 0 })} />
               <span className="text-muted">%</span>
               {slabs.length > 1 && !open && (
                 <button type="button" onClick={() => remove(i)} className="rounded-lg p-1.5 text-muted hover:bg-tint-strong hover:text-red-600" aria-label={`Remove slab ${i + 1}`}>

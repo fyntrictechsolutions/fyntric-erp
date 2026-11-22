@@ -121,7 +121,7 @@ function PayrollRun() {
         actions={
           <>
             <label className="sr-only" htmlFor="pay-month">Month</label>
-            <input id="pay-month" type="month" className={cn(inputClasses, "w-44")} value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+            <input id="pay-month" type="month" className={cn(inputClasses, "!w-44")} value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
             {pending > 0 && (
               <Button onClick={() => void prepareAll()} disabled={busy !== null}>
                 <Plus className="size-4" /> {busy === "all" ? "Preparing…" : `Prepare all (${pending})`}
@@ -251,7 +251,7 @@ function MyPayslips() {
 function LinesEditor({ title, lines, onChange, addLabel, suggestions }: { title: string; lines: PayLine[]; onChange: (l: PayLine[]) => void; addLabel: string; suggestions: string[] }) {
   const listId = `${title.toLowerCase()}-names`;
   return (
-    <fieldset>
+    <fieldset className="min-w-0">
       <legend className={labelClasses}>{title}</legend>
       <datalist id={listId}>
         {suggestions.map((s) => (
@@ -264,7 +264,7 @@ function LinesEditor({ title, lines, onChange, addLabel, suggestions }: { title:
             <input
               aria-label={`${title} ${i + 1} name`}
               list={listId}
-              className={cn(inputClasses, "min-w-0 flex-1")}
+              className={cn(inputClasses, "!w-auto min-w-0 flex-1")}
               value={l.name}
               placeholder="Name"
               onChange={(e) => onChange(lines.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
@@ -273,7 +273,7 @@ function LinesEditor({ title, lines, onChange, addLabel, suggestions }: { title:
               aria-label={`${title} ${i + 1} amount`}
               type="number"
               min={0}
-              className={cn(inputClasses, "w-32 text-right tabular-nums")}
+              className={cn(inputClasses, "!w-28 shrink-0 text-right tabular-nums sm:!w-32")}
               value={l.amount}
               onChange={(e) => onChange(lines.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) || 0 } : x)))}
             />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CalendarClock, FileSignature, Handshake, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Trash2, User } from "lucide-react";
+import { Building2, CalendarClock, FileSignature, Handshake, Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -119,13 +119,13 @@ function LeadDetail({ id }: { id: string }) {
               stage && <Badge tone={stage.tone}>{stage.label}</Badge>
             )}
             {typeof lead.phone === "string" && lead.phone && (
-              <a href={`tel:${lead.phone}`} className={buttonClasses("secondary", "md")}>
-                <Phone className="size-4" /> Call
+              <a href={`tel:${lead.phone}`} aria-label="Call" title="Call" className={buttonClasses("secondary", "md")}>
+                <Phone className="size-4" /> <span className="hidden sm:inline">Call</span>
               </a>
             )}
             {wa && (
-              <a href={wa} target="_blank" rel="noreferrer" className={buttonClasses("secondary", "md")}>
-                <MessageCircle className="size-4" /> WhatsApp
+              <a href={wa} target="_blank" rel="noreferrer" aria-label="WhatsApp" title="WhatsApp" className={buttonClasses("secondary", "md")}>
+                <MessageCircle className="size-4" /> <span className="hidden sm:inline">WhatsApp</span>
               </a>
             )}
             {canConvert && (
@@ -134,8 +134,8 @@ function LeadDetail({ id }: { id: string }) {
               </Button>
             )}
             {leadAccess.canDelete(lead) && (
-              <Button variant="danger" onClick={() => void doDelete()} disabled={busy}>
-                <Trash2 className="size-4" /> Delete
+              <Button variant="danger" onClick={() => void doDelete()} disabled={busy} aria-label="Delete lead" title="Delete">
+                <Trash2 className="size-4" /> <span className="hidden sm:inline">Delete</span>
               </Button>
             )}
             {leadAccess.canEdit(lead) && (
@@ -240,19 +240,25 @@ function LeadDetail({ id }: { id: string }) {
   );
 }
 
+const isEmptyValue = (v: unknown) => v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
 const CONTACT_FIELDS = ["name", "company", "email", "phone", "address", "stage"];
 
 /** Contact lines without labels (they speak for themselves), then the other fields in a tight grid. */
 function BasicDetails({ lead, role }: { lead: BaseRecord; role: string }) {
   const str = (k: string) => (typeof lead[k] === "string" && lead[k] ? (lead[k] as string) : "");
   const contact = [
-    { icon: User, text: str("name") },
     { icon: Building2, text: str("company") },
     { icon: Phone, text: str("phone"), href: str("phone") && `tel:${str("phone")}` },
     { icon: Mail, text: str("email"), href: str("email") && `mailto:${str("email")}` },
     { icon: MapPin, text: str("address"), wide: true },
   ].filter((c) => c.text);
-  const others = leadsModule.fields.filter((f) => !f.hidden && !f.createOnly && !CONTACT_FIELDS.includes(f.name) && !f.hiddenFor?.includes(role as never));
+  // Empty fields are left out, and short ones come first so they pair up two to a row on phones.
+  const isWide = (f: (typeof leadsModule.fields)[number]) => f.type === "textarea" || f.type === "multiselect";
+  const others = leadsModule.fields
+    .filter((f) => !f.hidden && !f.createOnly && !CONTACT_FIELDS.includes(f.name) && !f.hiddenFor?.includes(role as never))
+    .filter((f) => !isEmptyValue(lead[f.name]))
+    .sort((a, b) => Number(isWide(a)) - Number(isWide(b)));
   return (
     <Card className="p-4 sm:p-5">
       <h2 className="sr-only">Basic details</h2>
@@ -268,9 +274,9 @@ function BasicDetails({ lead, role }: { lead: BaseRecord; role: string }) {
           </li>
         ))}
       </ul>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 sm:grid-cols-3 lg:grid-cols-4">
+      {others.length > 0 && <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 sm:grid-cols-3 lg:grid-cols-4">
         {others.map((f) => {
-          const wide = f.type === "textarea" || f.type === "multiselect";
+          const wide = isWide(f);
           return (
             <div key={f.name} className={wide ? "col-span-2 sm:col-span-3 lg:col-span-4" : "min-w-0"}>
               <dt className="text-[11px] font-medium tracking-wide text-subtle uppercase">{f.label}</dt>
@@ -278,7 +284,7 @@ function BasicDetails({ lead, role }: { lead: BaseRecord; role: string }) {
             </div>
           );
         })}
-      </dl>
+      </dl>}
       <p className="mt-3 text-xs text-subtle">
         Added by {String(lead.userName ?? "—")} on {formatDate(lead.createdAt)}
       </p>
