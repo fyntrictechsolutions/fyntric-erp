@@ -1,9 +1,8 @@
 "use client";
 
 import { Mail, MessageCircle, Pencil, Printer } from "lucide-react";
-import Image from "next/image";
 import { useState } from "react";
-import logoColor from "@/assets/brand/logo-color.png";
+import { CompanyLogo } from "@/components/common/CompanyLogo";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound, WithRecordId } from "@/components/common/DetailShell";
 import { NoAccess } from "@/components/resource/ModulePage";
@@ -155,7 +154,7 @@ function EstimateSheet({ est, lead }: { est: BaseRecord; lead: BaseRecord | null
     <article className="print-sheet mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-card sm:p-10">
       <header className="flex flex-col gap-6 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Image src={logoColor} alt={b.name} className="h-10 w-auto" sizes="200px" />
+          <CompanyLogo />
           <p className="mt-3 font-semibold text-slate-900">{b.name}</p>
           <p className="mt-1 max-w-xs text-sm whitespace-pre-line text-slate-600">{b.address}</p>
           <p className="mt-1 text-sm text-slate-600">{[b.phone, b.email].filter(Boolean).join(" · ")}</p>

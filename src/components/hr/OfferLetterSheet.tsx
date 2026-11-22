@@ -1,5 +1,4 @@
-import Image from "next/image";
-import logoColor from "@/assets/brand/logo-color.png";
+import { CompanyLogo } from "@/components/common/CompanyLogo";
 import { formatDate } from "@/lib/format";
 import type { OfferLetter } from "@/lib/offerLetter";
 
@@ -8,7 +7,7 @@ export function OfferLetterSheet({ offer, email }: { offer: OfferLetter; email?:
   return (
     <article className="print-sheet mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-card sm:p-12">
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
-        <Image src={logoColor} alt={offer.company} className="h-10 w-auto" sizes="200px" />
+        <CompanyLogo />
         <div className="text-sm text-slate-600 sm:text-right">
           <p className="font-semibold text-slate-900">{offer.company}</p>
           <p className="max-w-xs whitespace-pre-line">{offer.companyAddress}</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { collection, getDocs } from "firebase/firestore";
-import { Check, Download, Loader2, MailPlus, Plus, Users, X } from "lucide-react";
+import { Check, Download, Loader2, MailPlus, Plus, Upload, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -23,7 +23,7 @@ import { formatDate, todayISO } from "@/lib/format";
 import type { BaseRecord, UserProfile } from "@/types";
 import { saveSettings, useSettings, type Settings, type SettingsSection } from "./SettingsProvider";
 
-type Tab = "business" | "team" | "lists" | "offer" | "data" | "app";
+type Tab = "business" | "team" | "lists" | "defaults" | "offer" | "data" | "app";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function SettingsPage() {
@@ -40,6 +40,7 @@ export function SettingsPage() {
           { value: "business", label: "Business" },
           { value: "team", label: "Team" },
           { value: "lists", label: "Lists" },
+          { value: "defaults", label: "Defaults" },
           { value: "offer", label: "Offer letter" },
           { value: "data", label: "Data" },
           { value: "app", label: "App" },
@@ -50,9 +51,10 @@ export function SettingsPage() {
       {tab === "business" && <BusinessTab onState={setState} />}
       {tab === "team" && <TeamTab />}
       {tab === "lists" && <ListsTab onState={setState} />}
+      {tab === "defaults" && <DefaultsTab onState={setState} />}
       {tab === "data" && <DataTab />}
       {tab === "offer" && <OfferTab onState={setState} />}
-      {tab === "app" && <AppTab onState={setState} />}
+      {tab === "app" && <AppTab />}
     </div>
   );
 }
@@ -130,7 +132,8 @@ function BusinessTab({ onState }: { onState: (s: SaveState) => void }) {
   return (
     <Card className="p-5 sm:p-6">
       <h2 className="font-display text-base font-semibold text-foreground">Business details</h2>
-      <p className="mb-5 text-sm text-muted">Shown on estimates and invoices.</p>
+      <p className="mb-5 text-sm text-muted">Shown on estimates, invoices, receipts, offer letters and payslips.</p>
+      <LogoField value={values.logo} onChange={(v) => set("logo", v, true)} />
       <div className="grid gap-4 sm:grid-cols-2">
         {BUSINESS_FIELDS.map((f) => (
           <div key={f.key} className={f.wide ? "sm:col-span-2" : undefined}>
@@ -145,6 +148,86 @@ function BusinessTab({ onState }: { onState: (s: SaveState) => void }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+/** Shrinks a picture to fit 480×160 and returns it as a data URL (PNG keeps transparency; JPEG if that's much smaller). */
+async function shrinkLogo(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("That file isn't a picture we can read. Try a PNG or JPEG."));
+      i.src = url;
+    });
+    const scale = Math.min(1, 480 / img.naturalWidth, 160 / img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const png = canvas.toDataURL("image/png");
+    if (png.length < 200_000) return png;
+    const flat = document.createElement("canvas");
+    flat.width = canvas.width;
+    flat.height = canvas.height;
+    const g = flat.getContext("2d")!;
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, flat.width, flat.height);
+    g.drawImage(canvas, 0, 0);
+    return flat.toDataURL("image/jpeg", 0.9);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function LogoField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-4 rounded-xl border border-line p-4">
+      <div className="grid h-16 w-40 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-line">
+        {value ? (
+          // A small data URL, so next/image adds nothing.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt="Company logo" className="max-h-full max-w-full object-contain" />
+        ) : (
+          <span className="text-xs text-slate-400">No logo</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">Company logo</p>
+        <p className="text-xs text-muted">PNG or JPEG, ideally a wide logo on a transparent or white background. It&apos;s printed on every document the app makes.</p>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => input.current?.click()}>
+            <Upload className="size-4" /> {value ? "Change logo" : "Upload logo"}
+          </Button>
+          {value && (
+            <Button size="sm" variant="ghost" onClick={() => onChange("")}>
+              Remove
+            </Button>
+          )}
+        </div>
+        <input
+          ref={input}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setError(null);
+            try {
+              onChange(await shrinkLogo(file));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -364,13 +447,13 @@ function DataTab() {
   );
 }
 
-function AppTab({ onState }: { onState: (s: SaveState) => void }) {
+function DefaultsTab({ onState }: { onState: (s: SaveState) => void }) {
   const { values, set } = useAutosave("app", onState);
   const num = (v: string) => (v === "" ? 0 : Number(v));
   return (
     <div className="space-y-6">
       <Card className="p-5 sm:p-6">
-        <h2 className="mb-5 font-display text-base font-semibold text-foreground">Defaults</h2>
+        <h2 className="mb-5 font-display text-base font-semibold text-foreground">Office and estimates</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor="a-hours" className={labelClasses}>Working hours a day</label>
@@ -400,6 +483,15 @@ function AppTab({ onState }: { onState: (s: SaveState) => void }) {
           </div>
         </div>
       </Card>
+      <CommissionCard values={values} set={set} />
+      <PayrollDefaultsCard values={values} set={set} num={num} />
+    </div>
+  );
+}
+
+function AppTab() {
+  return (
+    <div className="space-y-6">
       <Card className="flex items-center justify-between gap-4 p-5 sm:p-6">
         <div>
           <h2 className="font-display text-base font-semibold text-foreground">Theme</h2>
@@ -408,6 +500,109 @@ function AppTab({ onState }: { onState: (s: SaveState) => void }) {
         <ThemeToggle />
       </Card>
     </div>
+  );
+}
+
+type AppValues = Settings["app"];
+type SetApp = <K extends keyof AppValues>(key: K, value: AppValues[K], immediate?: boolean) => void;
+
+const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+/** Commission slabs for sales staff: "up to ₹X earns Y%", lowest first; the last slab has no upper limit. */
+function CommissionCard({ values, set }: { values: AppValues; set: SetApp }) {
+  const slabs = values.commissionSlabs;
+  const update = (i: number, patch: Partial<AppValues["commissionSlabs"][number]>) => set("commissionSlabs", slabs.map((sl, j) => (j === i ? { ...sl, ...patch } : sl)));
+  const add = () => {
+    const last = slabs[slabs.length - 1];
+    const prevTop = slabs.length > 1 ? slabs[slabs.length - 2].upTo ?? 0 : 0;
+    // The open-ended slab stays last: the new one goes before it.
+    const next = [...slabs.slice(0, -1), { upTo: (prevTop || 0) + 100000, rate: last?.rate ?? 1 }, last ?? { upTo: null, rate: 1 }];
+    set("commissionSlabs", next, true);
+  };
+  const remove = (i: number) => set("commissionSlabs", slabs.filter((_, j) => j !== i), true);
+  return (
+    <Card className="p-5 sm:p-6">
+      <h2 className="font-display text-base font-semibold text-foreground">Sales commission</h2>
+      <p className="mb-4 text-sm text-muted">
+        Added to a salesperson&apos;s payroll from the invoices they raised that month (value before GST, not drafts or cancelled).
+      </p>
+      <div className="space-y-2">
+        {slabs.map((sl, i) => {
+          const from = i === 0 ? 0 : slabs[i - 1].upTo ?? 0;
+          const open = i === slabs.length - 1;
+          return (
+            <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="w-28 text-muted">{i === 0 ? "Up to" : `${inr(from)} to`}</span>
+              {open ? (
+                <span className="w-36 text-muted">no limit</span>
+              ) : (
+                <input
+                  aria-label={`Slab ${i + 1} up to`}
+                  type="number"
+                  min={from + 1}
+                  className={cn(inputClasses, "w-36")}
+                  value={sl.upTo ?? ""}
+                  onChange={(e) => update(i, { upTo: e.target.value === "" ? 0 : Number(e.target.value) })}
+                />
+              )}
+              <span className="text-muted">earns</span>
+              <input aria-label={`Slab ${i + 1} rate`} type="number" min={0} max={100} step={0.1} className={cn(inputClasses, "w-24")} value={sl.rate} onChange={(e) => update(i, { rate: Number(e.target.value) || 0 })} />
+              <span className="text-muted">%</span>
+              {slabs.length > 1 && !open && (
+                <button type="button" onClick={() => remove(i)} className="rounded-lg p-1.5 text-muted hover:bg-tint-strong hover:text-red-600" aria-label={`Remove slab ${i + 1}`}>
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <Button variant="secondary" size="sm" className="mt-3" onClick={add}>
+        <Plus className="size-4" /> Add slab
+      </Button>
+      <fieldset className="mt-5">
+        <legend className={labelClasses}>How the slabs apply</legend>
+        <div className="mt-1 grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              ["tiered", "Each part at its own rate", "e.g. ₹5 lakh sales: 1% on the first ₹1 lakh + 3% on the next ₹4 lakh = ₹13,000."],
+              ["flat", "Whole amount at the slab reached", "e.g. ₹5 lakh sales: all of it at 3% = ₹15,000."],
+            ] as const
+          ).map(([v, title, hint]) => (
+            <label key={v} className={cn("flex cursor-pointer gap-3 rounded-xl border p-3 text-sm", values.commissionMode === v ? "border-brand-500 bg-accent-soft" : "border-line")}>
+              <input type="radio" name="commissionMode" className="mt-0.5 accent-brand-600" checked={values.commissionMode === v} onChange={() => set("commissionMode", v, true)} />
+              <span>
+                <span className="font-medium text-foreground">{title}</span>
+                <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </Card>
+  );
+}
+
+function PayrollDefaultsCard({ values, set, num }: { values: AppValues; set: SetApp; num: (v: string) => number }) {
+  const field = (key: "pfRate" | "pfWageCap" | "esiRate" | "esiGrossLimit" | "professionalTax", label: string, help: string, step = 1) => (
+    <div>
+      <label htmlFor={`p-${key}`} className={labelClasses}>{label}</label>
+      <input id={`p-${key}`} type="number" min={0} step={step} className={inputClasses} value={values[key]} onChange={(e) => set(key, num(e.target.value))} />
+      <p className="mt-1 text-xs text-subtle">{help}</p>
+    </div>
+  );
+  return (
+    <Card className="p-5 sm:p-6">
+      <h2 className="font-display text-base font-semibold text-foreground">Payroll deductions</h2>
+      <p className="mb-5 text-sm text-muted">Suggested on each new payslip; HR can change them on the payslip before saving.</p>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {field("pfRate", "Employee PF (% of Basic)", "0 turns PF off.", 0.5)}
+        {field("pfWageCap", "PF wage ceiling (₹)", "PF is worked out on Basic up to this. 0 = no ceiling.")}
+        {field("professionalTax", "Professional tax a month (₹)", "0 = none.")}
+        {field("esiRate", "Employee ESI (% of gross)", "0 turns ESI off.", 0.05)}
+        {field("esiGrossLimit", "ESI applies up to gross (₹)", "People earning more a month don't pay ESI.")}
+      </div>
+    </Card>
   );
 }
 

@@ -18,6 +18,8 @@ export interface BusinessSettings {
   accountName: string;
   accountNumber: string;
   ifsc: string;
+  /** Company logo as a small PNG/JPEG data URL, printed on estimates, invoices, letters and payslips. */
+  logo: string;
 }
 
 export interface Holiday {
@@ -54,6 +56,27 @@ export interface AppSettings {
   defaultTaxRate: number;
   estimateValidityDays: number;
   estimateTerms: string;
+  /** Sales commission slabs, lowest first. `upTo` is the top of the slab in ₹ (null = no limit). */
+  commissionSlabs: CommissionSlab[];
+  /**
+   * "tiered": each part of the month's sales earns its own slab's rate (like income tax).
+   * "flat": the whole amount earns the rate of the slab it reaches.
+   */
+  commissionMode: "tiered" | "flat";
+  /** Employee PF as % of Basic (0 = no PF). */
+  pfRate: number;
+  /** PF is worked out on Basic up to this amount (the statutory wage ceiling). 0 = no ceiling. */
+  pfWageCap: number;
+  /** Employee ESI as % of gross, for people earning up to esiGrossLimit a month (0 = no ESI). */
+  esiRate: number;
+  esiGrossLimit: number;
+  /** Professional tax taken each month (0 = none). */
+  professionalTax: number;
+}
+
+export interface CommissionSlab {
+  upTo: number | null;
+  rate: number;
 }
 
 export const DEFAULT_BUSINESS: BusinessSettings = {
@@ -71,6 +94,7 @@ export const DEFAULT_BUSINESS: BusinessSettings = {
   accountName: "",
   accountNumber: "",
   ifsc: "",
+  logo: "",
 };
 
 /** Kerala government public holidays 2026 (source: Onmanorama, 29 Oct 2025; moon-dependent dates may move). */
@@ -123,6 +147,18 @@ export const DEFAULT_APP: AppSettings = {
   defaultTaxRate: 18,
   estimateValidityDays: 15,
   estimateTerms: "50% advance to start the work, balance on delivery.\nPrices are exclusive of GST unless stated.\nThis estimate is valid until the date shown above.",
+  commissionSlabs: [
+    { upTo: 100000, rate: 1 },
+    { upTo: 1000000, rate: 3 },
+    { upTo: 3000000, rate: 6 },
+    { upTo: null, rate: 8 },
+  ],
+  commissionMode: "tiered",
+  pfRate: 12,
+  pfWageCap: 15000,
+  esiRate: 0.75,
+  esiGrossLimit: 21000,
+  professionalTax: 0,
 };
 
 export const LIST_META: Record<keyof ListSettings, { label: string; help: string }> = {
