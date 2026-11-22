@@ -73,7 +73,7 @@ Run the deploy again whenever `firestore.rules` changes.
 `.github/workflows/deploy-rules.yml` tests `firestore.rules` and `storage.rules` in the emulators and publishes them whenever they change on `main`, so nobody has to paste them into the console. It signs in to Google with Workload Identity Federation, so there is no key to store or leak; Google trusts only the `main` branch of this repo. One-time setup (already done for `fyntric-erp`):
 
 1. Google Cloud console → **IAM & Admin → Service accounts** (project `fyntric-erp`) → **Create service account**, name it `github-rules-deploy`.
-2. Give it three roles, nothing broader: **Firebase Rules Admin**, **Firebase Viewer** and **Service Usage Consumer**. Then **Done**.
+2. Give it these roles, nothing broader: **Firebase Rules Admin**, **Firebase Rules Viewer**, **Cloud Storage for Firebase Viewer** and **Service Usage Consumer**. Then **Done**.
 3. Open **Cloud Shell** (the `>_` button) and run:
 
    ```sh
