@@ -71,6 +71,7 @@ export type ModuleKey =
   | "purchases"
   | "invoices"
   | "payments"
+  | "recurring"
   | "expenses"
   | "reports"
   | "settings"
@@ -174,6 +175,8 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
     viewer: READ_ALL,
   }),
   payments: row({ sales: { read: "all", create: true, update: "none", delete: "none" }, investor: READ_ALL, viewer: READ_ALL }),
+  // Whoever raises invoices keeps the schedule (and moves it on when they bill a period).
+  recurring: row({ sales: { read: "all", create: true, update: "all", delete: "none" }, investor: READ_ALL, viewer: READ_ALL }),
   expenses: row({ ...staffWide(OWN), investor: READ_ALL, viewer: READ_ALL }),
 
   // Insights and administration (pages, not collections)
@@ -205,6 +208,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   purchases: "Purchase bills",
   invoices: "Invoices",
   payments: "Payments",
+  recurring: "Recurring billing",
   expenses: "Expenses",
   reports: "Reports",
   settings: "Settings",

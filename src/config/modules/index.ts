@@ -1,6 +1,6 @@
 import type { ModuleKey } from "@/config/roles";
 import { clientsModule, leadsModule } from "./crm";
-import { expensesModule, invoicesModule, paymentsModule } from "./finance";
+import { expensesModule, invoicesModule, paymentsModule, recurringModule } from "./finance";
 import { attendanceModule, employeesModule, leaveModule } from "./hr";
 import { projectsModule, timesheetsModule } from "./projects";
 import { purchasesModule, suppliersModule } from "./purchases";
@@ -27,6 +27,7 @@ export const MODULES: Partial<Record<ModuleKey, ModuleDefinition>> = {
   candidates: candidatesModule,
   invoices: invoicesModule,
   payments: paymentsModule,
+  recurring: recurringModule,
   expenses: expensesModule,
 };
 

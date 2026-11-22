@@ -1,7 +1,7 @@
 "use client";
 
 import { collection, query, where } from "firebase/firestore";
-import { CalendarCheck, CalendarOff, ChevronRight, FileText, FolderKanban, LogOut, Receipt, Target, Timer, Users } from "lucide-react";
+import { CalendarCheck, CalendarOff, ChevronRight, FileText, FolderKanban, LogOut, Receipt, Repeat, Target, Timer, Users } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -9,10 +9,11 @@ import { FieldValue } from "@/components/resource/FieldValue";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { MODULES } from "@/config/modules";
-import { ROLE_LABELS } from "@/config/roles";
+import { permissionFor, ROLE_LABELS } from "@/config/roles";
 import { useLiveQuery, useModuleRecords } from "@/hooks/useCollection";
 import { db } from "@/lib/firebase";
 import { formatCurrency, formatDate, monthOf, todayISO } from "@/lib/format";
+import { daysUntil, REMIND_DAYS } from "@/lib/recurring";
 import { isCoolingOff, type ExitDoc } from "@/lib/resignation";
 import type { BaseRecord } from "@/types";
 import { StatCard } from "./StatCard";
@@ -78,6 +79,7 @@ export function Dashboard() {
       />
 
       {reviewsLeave && <NewResignations />}
+      {permissionFor(profile.role, "recurring").update !== "none" && <DueForBilling />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {projects.allowed && (
@@ -223,6 +225,47 @@ function RevenueCard({ invoices, payments }: { invoices: BaseRecord[]; payments:
           <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-brand-600" /> Collected</span>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/** For whoever raises invoices: recurring charges due within two weeks, or overdue. Reminders only. */
+function DueForBilling() {
+  const profile = useProfile();
+  const { data } = useModuleRecords("recurring", profile);
+  const today = todayISO();
+  const due = data
+    .filter((r) => r.status === "active" && daysUntil(r.nextDue, today) <= REMIND_DAYS)
+    .sort((a, b) => String(a.nextDue).localeCompare(String(b.nextDue)));
+  if (!due.length) return null;
+  return (
+    <Card className="mb-6 border-blue-500/40 bg-blue-500/5">
+      <div className="flex items-center justify-between gap-2 px-5 pt-4">
+        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Repeat className="size-4 text-blue-600" /> {due.length === 1 ? "A recurring charge is due for billing" : `${due.length} recurring charges are due for billing`}
+        </p>
+        <Link href="/finance/recurring" className="text-xs font-medium text-accent hover:underline">All recurring</Link>
+      </div>
+      <ul className="divide-y divide-line">
+        {due.map((r) => {
+          const days = daysUntil(r.nextDue, today);
+          const when = days < 0 ? `was due ${formatDate(r.nextDue)}` : days === 0 ? "due today" : `due ${formatDate(r.nextDue)}`;
+          return (
+            <li key={r.id}>
+              <Link href={`/finance/invoices?new=1&recurringId=${encodeURIComponent(r.id)}`} className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-tint">
+                <span className="min-w-0">
+                  <span className="font-medium text-foreground">{String(r.title ?? "Recurring charge")}</span>
+                  <span className="text-muted"> · {String(r.clientIdLabel ?? "")} · {formatCurrency(r.total)} · </span>
+                  <span className={days < 0 ? "font-medium text-red-600" : "text-muted"}>{when}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-accent">
+                  Raise invoice <ChevronRight className="size-4" />
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }

@@ -1,21 +1,34 @@
-import { Check, FileText, HandCoins, Receipt, Wallet, X } from "lucide-react";
+import { Check, FileText, HandCoins, Pause, Play, Receipt, Repeat, Square, Wallet, X } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { formatCurrency, todayISO } from "@/lib/format";
+import { formatCurrency, formatDate, todayISO } from "@/lib/format";
 import { recalcPaid } from "@/lib/payments";
-import { discountedTotals } from "@/lib/lineItems";
+import { discountedTotals, discountsOf, groupedTotals } from "@/lib/lineItems";
+import { createRecord, updateRecord } from "@/lib/records";
+import { linesForPeriod, nextDueAfter, periodLabel, type Frequency } from "@/lib/recurring";
 import { docNumber } from "./options";
 import type { FieldDefinition, LineItem, ModuleDefinition, SelectOption } from "./types";
 
+/** Recurring lines an estimate's invoice left out, ready to become billing schedules. */
+interface PendingGroup {
+  frequency: Frequency;
+  items: LineItem[];
+  discount: number;
+}
+
+const perLabel = (f: Frequency) => (f === "monthly" ? "a month" : "a year");
+
 /**
- * Optional first step of a new invoice: pick a saved estimate to copy its items, discount and notes,
- * and the client the estimate's lead was converted to. Everything can still be edited before saving.
+ * Optional first step of a new invoice: pick a saved estimate to copy its one-time items, their discount and
+ * notes, and the client the estimate's lead was converted to. Yearly and monthly lines (AMC, hosting) aren't
+ * billed today: they can go to Recurring billing instead, from a date you pick. Everything stays editable.
  */
 const fromEstimate: FieldDefinition = {
   name: "estimateId",
   label: "Fill from estimate (optional)",
   type: "reference",
   wide: true,
+  showWhen: (v) => !v.recurringId,
   reference: {
     module: "estimates",
     labelField: "estimateNumber",
@@ -23,24 +36,91 @@ const fromEstimate: FieldDefinition = {
   },
   help: "Pick a saved estimate to fill in the invoice, then change anything you need. Or leave it blank and fill in every field yourself.",
   fill: async (estimate) => {
+    const groups = groupedTotals(estimate.items as LineItem[] | undefined, discountsOf(estimate));
+    const once = groups.find((g) => g.key === "once");
+    const pending: PendingGroup[] = groups
+      .filter((g) => g.key !== "once")
+      .map((g) => ({ frequency: g.key as Frequency, items: g.items.map((x) => ({ ...x.item })), discount: g.discount }));
     const values: Record<string, unknown> = {
-      items: ((estimate.items as LineItem[] | undefined) ?? []).map((it) => ({ ...it })),
-      discount: estimate.discount ?? "",
+      items: once ? once.items.map((x) => ({ ...x.item })) : [],
+      discount: once?.discount || "",
       notes: estimate.notes ?? "",
+      pendingRecurring: pending,
+      scheduleRecurring: pending.length > 0,
     };
     const number = String(estimate.estimateNumber || "the estimate");
+    const left = pending.flatMap((g) => g.items.map((it) => `${it.name} (${formatCurrency(it.amount)} + GST ${perLabel(g.frequency)})`));
+    const parts = [
+      once ? `Filled in the one-time charges from ${number}.` : `${number} has no one-time charges, so add this invoice's items yourself.`,
+      left.length ? `Not billed today: ${left.join(", ")}. Tick below to add ${left.length === 1 ? "it" : "them"} to Recurring billing.` : "",
+    ];
     const leadId = estimate.leadId as string | undefined;
     const lead = leadId ? await getDoc(doc(db(), "leads", leadId)).catch(() => null) : null;
     const clientId = lead?.exists() ? (lead.get("clientId") as string | undefined) : undefined;
     if (clientId) {
       values.clientId = clientId;
       values.clientIdLabel = lead!.get("clientIdLabel") ?? "";
-      return { values, note: `Filled in from ${number}. Check the details before saving.` };
+      parts.push("Check the details before saving.");
+    } else {
+      parts.push(`${String(estimate.leadIdLabel || "This lead")} isn't a client yet, so pick the client below (or convert the lead first).`);
     }
-    const who = String(estimate.leadIdLabel || "This lead");
-    return { values, note: `Filled in from ${number}. ${who} isn't a client yet, so pick the client below (or convert the lead first).` };
+    return { values, note: parts.filter(Boolean).join(" ") };
   },
 };
+
+/** Or: the next period of a recurring charge. Saving the invoice moves the charge's next billing date on. */
+const fromRecurring: FieldDefinition = {
+  name: "recurringId",
+  label: "Bill a recurring charge (optional)",
+  type: "reference",
+  wide: true,
+  showWhen: (v) => !v.estimateId,
+  reference: {
+    module: "recurring",
+    labelField: "title",
+    format: (r) => [r.title || "Recurring charge", r.clientIdLabel, r.nextDue ? `due ${formatDate(r.nextDue)}` : ""].filter(Boolean).map(String).join(" · "),
+  },
+  help: "For AMC, hosting and other charges billed every year or month. They're set up in Finance → Recurring billing.",
+  fill: async (r) => {
+    const start = String(r.nextDue || todayISO());
+    return {
+      values: {
+        items: linesForPeriod(r.items as LineItem[] | undefined, start, r.frequency),
+        discount: r.discount ?? "",
+        clientId: r.clientId ?? "",
+        clientIdLabel: r.clientIdLabel ?? "",
+        projectId: r.projectId ?? "",
+        projectIdLabel: r.projectIdLabel ?? "",
+        recurringPeriodStart: start,
+      },
+      note: `Filled in for ${String(r.title || "this charge")}, ${periodLabel(start, r.frequency)}. Saving the invoice moves the next billing date to ${formatDate(nextDueAfter(start, r.frequency))}.`,
+    };
+  },
+};
+
+const hasPending = (v: Record<string, unknown>) => Boolean(v.estimateId) && Array.isArray(v.pendingRecurring) && v.pendingRecurring.length > 0;
+
+/** Asked when an estimate had recurring lines: whether to schedule them, and from when. Not saved on the invoice. */
+const scheduleFields: FieldDefinition[] = [
+  { name: "pendingRecurring", label: "Recurring lines", type: "text", hidden: true, createOnly: true },
+  {
+    name: "scheduleRecurring",
+    label: "Add the recurring charges to Recurring billing, so the app reminds me when they're due",
+    type: "checkbox",
+    wide: true,
+    createOnly: true,
+    showWhen: hasPending,
+  },
+  {
+    name: "recurringFirstDue",
+    label: "First billing date for the recurring charges",
+    type: "date",
+    required: true,
+    createOnly: true,
+    showWhen: (v) => hasPending(v) && Boolean(v.scheduleRecurring),
+    help: "When the first recurring invoice should go out, e.g. a year after the work is delivered. The dashboard reminds you two weeks before.",
+  },
+];
 
 const hasItems = (v: Record<string, unknown>) => Array.isArray(v.items) && v.items.length > 0;
 /** An invoice from before line items: it has an amount but no items. */
@@ -59,6 +139,8 @@ export const invoicesModule: ModuleDefinition = {
   columns: ["invoiceNumber", "clientId", "issueDate", "dueDate", "total", "balance", "status"],
   fields: [
     fromEstimate,
+    fromRecurring,
+    { name: "recurringPeriodStart", label: "Period starts", type: "date", hidden: true },
     { name: "invoiceNumber", label: "Invoice number", type: "text", help: "Leave blank to generate one." },
     { name: "clientId", label: "Client", type: "reference", required: true, reference: { module: "clients", labelField: "name" } },
     { name: "projectId", label: "Project", type: "reference", reference: { module: "projects", labelField: "name" } },
@@ -92,6 +174,7 @@ export const invoicesModule: ModuleDefinition = {
     },
     { name: "paidDate", label: "Paid on", type: "date", computed: true },
     { name: "notes", label: "Notes", type: "textarea", wide: true },
+    ...scheduleFields,
   ],
   validate: (v) => (hasItems(v) || isLegacy(v) ? null : "Add at least one item."),
   beforeSave: (data, { settings }) => {
@@ -131,6 +214,130 @@ export const invoicesModule: ModuleDefinition = {
       status,
     };
   },
+  afterCreate: async (id, data, { profile, settings }) => {
+    // Billed a period of a recurring charge: its next billing date moves one period on (once per period).
+    const recurringId = data.recurringId as string | undefined;
+    const start = data.recurringPeriodStart as string | undefined;
+    if (recurringId && start) {
+      const snap = await getDoc(doc(db(), "recurring", recurringId));
+      if (snap.exists() && snap.get("nextDue") === start)
+        await updateRecord("recurring", recurringId, {
+          nextDue: nextDueAfter(start, snap.get("frequency")),
+          lastInvoiceId: id,
+          lastInvoiceNumber: data.invoiceNumber ?? null,
+          lastBilledOn: todayISO(),
+        });
+    }
+    // From an estimate with yearly / monthly lines: one schedule per frequency, from the date picked.
+    const pending = data.pendingRecurring as PendingGroup[] | undefined;
+    if (data.scheduleRecurring && data.recurringFirstDue && Array.isArray(pending)) {
+      for (const g of pending) {
+        if (!g.items?.length) continue;
+        const values = recurringModule.beforeSave!(
+          {
+            title: g.items.map((it) => it.name).join(", "),
+            clientId: data.clientId ?? null,
+            clientIdLabel: data.clientIdLabel ?? null,
+            projectId: data.projectId ?? null,
+            projectIdLabel: data.projectIdLabel ?? null,
+            frequency: g.frequency,
+            nextDue: data.recurringFirstDue,
+            items: g.items,
+            discount: g.discount || null,
+            status: "active",
+            estimateId: data.estimateId ?? null,
+            estimateIdLabel: data.estimateIdLabel ?? null,
+            fromInvoiceId: id,
+            fromInvoiceNumber: data.invoiceNumber ?? null,
+          },
+          { settings, profile },
+        );
+        await createRecord("recurring", values, profile);
+      }
+    }
+  },
+};
+
+const FREQUENCIES: SelectOption[] = [
+  { value: "annually", label: "Every year" },
+  { value: "monthly", label: "Every month" },
+];
+
+/**
+ * Charges billed every year or month (AMC, hosting, subscriptions). The app only reminds: when one is due,
+ * Raise invoice opens a new invoice filled in for the period, and saving it moves the next billing date on.
+ */
+export const recurringModule: ModuleDefinition = {
+  key: "recurring",
+  title: "Recurring billing",
+  singular: "Recurring charge",
+  description: "AMC, hosting and other charges billed every year or month, with reminders when they're due.",
+  icon: Repeat,
+  href: "/finance/recurring",
+  statusField: "status",
+  searchFields: ["title", "clientIdLabel", "projectIdLabel", "estimateIdLabel"],
+  columns: [{ label: "Charge", fields: ["title", "clientId"] }, "frequency", "total", "nextDue", { label: "Last invoice", fields: ["lastInvoiceNumber", "lastBilledOn"] }, "status"],
+  fields: [
+    { name: "title", label: "What's billed", type: "text", required: true, placeholder: "e.g. AMC support", wide: true },
+    { name: "clientId", label: "Client", type: "reference", required: true, reference: { module: "clients", labelField: "name" } },
+    { name: "projectId", label: "Project", type: "reference", reference: { module: "projects", labelField: "name" } },
+    { name: "frequency", label: "Billed", type: "select", required: true, defaultValue: "annually", options: FREQUENCIES },
+    {
+      name: "nextDue",
+      label: "Next billing date",
+      type: "date",
+      required: true,
+      help: "When the next invoice should go out. The dashboard reminds you two weeks before.",
+    },
+    { name: "items", label: "Items billed each time", type: "items", wide: true },
+    { name: "discount", label: "Discount each time (₹, before GST)", type: "currency", min: 0, showWhen: hasItems },
+    { name: "amount", label: "Before GST", type: "currency", computed: true },
+    { name: "taxTotal", label: "GST", type: "currency", computed: true },
+    { name: "total", label: "Each time", type: "currency", computed: true },
+    {
+      name: "status",
+      label: "Status",
+      type: "select",
+      defaultValue: "active",
+      options: [
+        { value: "active", label: "Active", tone: "green" },
+        { value: "paused", label: "Paused", tone: "amber" },
+        { value: "ended", label: "Ended", tone: "neutral" },
+      ],
+      help: "Paused and ended charges don't remind you.",
+    },
+    { name: "lastInvoiceNumber", label: "Last invoice", type: "text", computed: true },
+    { name: "lastBilledOn", label: "Billed on", type: "date", computed: true },
+    { name: "estimateIdLabel", label: "From estimate", type: "text", computed: true },
+    { name: "notes", label: "Notes", type: "textarea", wide: true },
+  ],
+  validate: (v) => (hasItems(v) ? null : "Add the items billed each time."),
+  beforeSave: (data) => {
+    const items = (data.items as LineItem[] | undefined) ?? [];
+    const t = discountedTotals(items, data.discount);
+    return { ...data, items, discount: t.discount || null, amount: t.taxable, taxTotal: t.taxTotal, total: t.total };
+  },
+  actions: [
+    {
+      label: "Raise invoice",
+      icon: FileText,
+      variant: "primary",
+      requires: "editor",
+      when: (r) => r.status === "active",
+      href: (r) => `/finance/invoices?new=1&recurringId=${encodeURIComponent(r.id)}`,
+    },
+    { label: "Pause", icon: Pause, requires: "editor", when: (r) => r.status === "active", patch: () => ({ status: "paused" }) },
+    { label: "Resume", icon: Play, requires: "editor", when: (r) => r.status === "paused", patch: () => ({ status: "active" }) },
+    {
+      label: "End",
+      icon: Square,
+      variant: "danger",
+      requires: "editor",
+      when: (r) => r.status !== "ended",
+      confirm: "End this recurring charge? It stops reminding you. Invoices already raised stay as they are.",
+      patch: () => ({ status: "ended" }),
+    },
+  ],
 };
 
 export const expensesModule: ModuleDefinition = {

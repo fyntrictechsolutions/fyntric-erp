@@ -125,6 +125,8 @@ export interface RecordAction {
   patch?: (record: BaseRecord, ctx: ActionContext) => Record<string, unknown>;
   /** Or a custom handler for anything more involved. */
   run?: (record: BaseRecord, ctx: ActionContext) => Promise<void>;
+  /** Or open this page (e.g. a new invoice filled in from the record). */
+  href?: (record: BaseRecord) => string;
   confirm?: string;
 }
 

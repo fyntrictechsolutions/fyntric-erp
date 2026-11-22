@@ -141,9 +141,21 @@ const GUIDE: Section[] = [
         module: "invoices",
         href: "/finance/invoices",
         steps: [
-          "Invoices → New invoice. To save typing, pick a saved estimate in Fill from estimate: its items, discount, notes and client are filled in, and you can change anything before saving.",
+          "Invoices → New invoice. To save typing, pick a saved estimate in Fill from estimate: its one-time items, their discount, notes and client are filled in, and you can change anything before saving.",
+          "Yearly or monthly lines on the estimate (AMC, hosting) aren't billed on this invoice. Tick the box to add them to Recurring billing and pick the date the first one is due.",
           "Leave the invoice number blank to get the next number automatically.",
           "Open the invoice to print it or send it to the client.",
+        ],
+      },
+      {
+        title: "Recurring billing (AMC, hosting)",
+        module: "recurring",
+        href: "/finance/recurring",
+        steps: [
+          "Finance → Recurring billing lists charges billed every year or month, with the next billing date. Add one by hand, or tick the box when invoicing an estimate that has yearly or monthly lines.",
+          "Two weeks before a charge is due, it shows on your dashboard. Click Raise invoice: a new invoice opens filled in for the period (e.g. 1 Dec 2027 – 30 Nov 2028). Check it and save.",
+          "Saving that invoice moves the next billing date one year (or month) on. Nothing is billed automatically.",
+          "Pause a charge to stop reminders for a while, or End it when the client stops the service.",
         ],
       },
       {
