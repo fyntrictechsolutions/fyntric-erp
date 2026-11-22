@@ -1,0 +1,67 @@
+# Publishes firestore.rules and storage.rules to Firebase whenever they change on main,
+# after the rules tests pass in the emulators. Needs one repository secret:
+#   FIREBASE_SERVICE_ACCOUNT: the JSON key of a service account with the
+#   Firebase Rules Admin, Firebase Viewer and Service Usage Consumer roles (see README, "Rules publish themselves").
+name: Deploy Firebase rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - storage.rules
+      - firebase.json
+      - tests/firestore-rules.test.mjs
+      - .github/workflows/deploy-rules.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-rules
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_PROJECT: fyntric-erp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Test the rules in the emulators
+        run: npm run test:rules
+
+      - name: Check the deploy key is set
+        env:
+          KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Add the FIREBASE_SERVICE_ACCOUNT secret (see README) so rules can be published."
+            exit 1
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Publish Firestore rules
+        run: npx firebase deploy --only firestore:rules --project "$FIREBASE_PROJECT" --non-interactive
+
+      # Storage must be switched on in the Firebase console first; until then this step only warns.
+      - name: Publish Storage rules
+        continue-on-error: true
+        run: npx firebase deploy --only storage --project "$FIREBASE_PROJECT" --non-interactive
