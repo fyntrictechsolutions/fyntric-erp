@@ -409,6 +409,31 @@ describe("module access by role", () => {
     assert.equal(await allowed(setDoc(doc(users.staff.db, "recurring", "r2"), mine(users.staff))), false);
     assert.equal(await allowed(deleteDoc(doc(users.admin.db, "recurring", "r1"))), true);
   });
+  test("project task board, assets and checklist: PM runs them, assignees move their own tasks, clients see nothing", async () => {
+    const pm = users.project_manager, staff = users.staff;
+    await admin.doc(`users/${staff.uid}`).update({ employeeId: "empS" });
+    const t = (u, extra = {}) => ({ title: "Design", status: "todo", order: 0, assigneeId: "empS", assigneeName: "S", userId: u.uid, createdBy: u.uid, createdAt: 1, ...extra });
+    assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/tasks/t1"), t(pm))), true);
+    assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/tasks/t2"), t(pm, { assigneeId: "other" }))), true);
+    assert.equal(await allowed(setDoc(doc(staff.db, "projects/p1/tasks/t3"), t(staff))), false);
+    assert.equal(await allowed(getDocs(collection(staff.db, "projects/p1/tasks"))), true);
+    // The assignee moves their task, but can't rename it or move someone else's.
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects/p1/tasks/t1"), { status: "in_progress", order: 2, updatedAt: 2 })), true);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects/p1/tasks/t1"), { title: "Mine" })), false);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects/p1/tasks/t2"), { status: "done" })), false);
+    assert.equal(await allowed(deleteDoc(doc(staff.db, "projects/p1/tasks/t1"))), false);
+    // Checklist and assets: PM only writes; investors read; clients see none of it.
+    const item = (u) => ({ text: "Handover", done: false, order: 0, userId: u.uid, createdBy: u.uid, createdAt: 1 });
+    assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/checklist/c1"), item(pm))), true);
+    assert.equal(await allowed(updateDoc(doc(pm.db, "projects/p1/checklist/c1"), { done: true })), true);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects/p1/checklist/c1"), { done: false })), false);
+    assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/assets/a1"), { kind: "note", title: "Logins", text: "x", userId: pm.uid })), true);
+    assert.equal(await allowed(getDocs(collection(users.investor.db, "projects/p1/assets"))), true);
+    assert.equal(await allowed(getDocs(collection(users.client.db, "projects/p1/tasks"))), false);
+    assert.equal(await allowed(getDocs(collection(users.client.db, "projects/p1/checklist"))), false);
+    assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/other/x"), item(pm))), false);
+    assert.equal(await allowed(deleteDoc(doc(pm.db, "projects/p1/tasks/t2"))), true);
+  });
   test("nobody can reassign ownership of a record", async () => {
     assert.equal(await allowed(updateDoc(doc(users.admin.db, "invoices", "i1"), { userId: users.admin.uid })), false);
   });

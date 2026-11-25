@@ -10,6 +10,7 @@ export const projectsModule: ModuleDefinition = {
   description: "Client projects with owners, deadlines and progress.",
   icon: FolderKanban,
   href: "/projects",
+  detailHref: (id) => `/projects/view?id=${id}`,
   statusField: "status",
   searchFields: ["name", "code", "clientIdLabel", "managerIdLabel"],
   columns: ["name", "clientId", "managerId", "dueDate", "progress", "status"],
