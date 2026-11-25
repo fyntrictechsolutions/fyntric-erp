@@ -134,6 +134,23 @@ const GUIDE: Section[] = [
     ],
   },
   {
+    title: "Delivery",
+    topics: [
+      {
+        title: "Running a project",
+        module: "projects",
+        href: "/projects",
+        steps: [
+          "Projects → click a project to open it. Summary shows its details, progress and counts.",
+          "Task planner: Add task, assign it to a team member and drag the card across To do, In progress, In review and Done. On a phone, press and hold a card before dragging, or open it and change the status.",
+          "Team members see the board and move the tasks assigned to them. Admins and project managers add, edit and delete tasks.",
+          "Assets: upload files (designs, documents) and write notes (logins, hosting details) for the project.",
+          "Delivery checklist: add what must be done before handing over, tick items off, and drag the handle to reorder. The counts at the top show what's pending.",
+        ],
+      },
+    ],
+  },
+  {
     title: "Finance",
     topics: [
       {

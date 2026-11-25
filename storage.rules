@@ -27,6 +27,14 @@ service firebase.storage {
       allow delete: if hasRole(['admin', 'sales']);
     }
 
+    // Project files: projects/{projectId}/{assetId}/{file name}. The team can open them;
+    // admins and project managers add and delete them.
+    match /projects/{projectId}/{assetId}/{name} {
+      allow read: if hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'staff', 'investor', 'viewer']);
+      allow create, update: if hasRole(['admin', 'project_manager']) && sizeOk();
+      allow delete: if hasRole(['admin', 'project_manager']);
+    }
+
     // Nothing else is stored.
     match /{path=**} {
       allow read, write: if false;
