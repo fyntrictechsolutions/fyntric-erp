@@ -35,6 +35,15 @@ service firebase.storage {
       allow delete: if hasRole(['admin', 'project_manager']);
     }
 
+    // Screenshots in case studies: documents/{docId}/{file}. Shared documents show them by their
+    // download link; in the app, the sales team uploads and removes them.
+    match /documents/{docId}/{name} {
+      allow read: if hasRole(['admin', 'project_manager', 'sales']);
+      allow create, update: if hasRole(['admin', 'sales']) && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
     // Nothing else is stored.
     match /{path=**} {
       allow read, write: if false;

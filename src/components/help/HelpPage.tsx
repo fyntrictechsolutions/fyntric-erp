@@ -124,6 +124,19 @@ const GUIDE: Section[] = [
         ],
       },
       {
+        title: "Sales documents (profile, NDA, SOW, agreement)",
+        module: "documents",
+        href: "/crm/documents",
+        steps: [
+          "Sales → Documents: set up the company profile once and add a case study for each project worth showing (problem, what you built, result, screenshots).",
+          "First contact: on a lead's page press Send company profile. Case studies for the same services are ticked; you get one message with all the links to send on WhatsApp or email.",
+          "On the lead's (or project's) page, use New: NDA, Questionnaire, Proposal / SOW or Agreement. Each starts from the template in Sales → Documents → Templates; edit it freely.",
+          "Scope of work & quotation: pick the lead's estimate to fill the total, then check the key details, payment milestones and AMC %. Amounts in the milestone and AMC lines are worked out from the total.",
+          "Changes after sending? Press New revision: it makes Rev. 2 and marks the old one replaced. When the client signs the declaration page, press Mark accepted.",
+          "Share makes a link anyone can open and save as PDF, without signing in. Stop sharing turns the link off.",
+        ],
+      },
+      {
         title: "Products and the sales gallery",
         module: "products",
         steps: [

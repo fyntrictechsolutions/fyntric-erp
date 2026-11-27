@@ -263,6 +263,23 @@ service cloud.firestore {
       allow delete: if resource.data.gallery == 'sales' && hasRole(['admin', 'sales']);
     }
 
+    // Sales documents: company profile, case studies, NDAs, questionnaires, proposals, agreements and their templates.
+    match /documents/{id} {
+      allow read: if hasRole(['admin', 'sales', 'project_manager']);
+      allow create: if hasRole(['admin', 'sales']) && createsOwn();
+      allow update: if hasRole(['admin', 'sales']) && keepsOwner();
+      allow delete: if hasRole(['admin', 'sales']) && !(id in ['company-profile']);
+    }
+
+    // Read-only copies of documents shared by link with leads and clients. Anyone holding the link
+    // (a long random id) can open that one copy; nobody can list them.
+    match /shared/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if hasRole(['admin', 'sales']) && token.size() >= 20;
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
     match /products/{id} {
       allow read: if internal() || hasRole(['investor', 'viewer']);
       allow create: if hasRole(['admin', 'sales']) && createsOwn();
