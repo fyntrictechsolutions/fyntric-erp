@@ -8,7 +8,8 @@ import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { amountInWords } from "@/lib/amountInWords";
 import { groupedTotals } from "@/lib/lineItems";
-import { DEFAULT_AMC, KINDS, proposalTotal, type DocFields, type SharedCopy } from "@/lib/salesDocs";
+import { QrCode } from "@/components/ui/QrCode";
+import { amcBase, blockHours, blockTotal, DEFAULT_AMC, isHourly, KINDS, proposalTotal, rowRate, type CostBlock, type DocFields, type SharedCopy } from "@/lib/salesDocs";
 
 type Business = SharedCopy["business"] | BusinessSettings;
 
@@ -118,10 +119,25 @@ export function DocumentSheet({
               <div key={i} className="space-y-7">
                 {i === priceAt && <Price d={d} total={total} />}
                 <section>
-                  {s.heading && <h2 className="text-[17px] font-semibold text-slate-900">{n ? `${n}. ` : ""}{s.heading}</h2>}
+                  {s.heading && (
+                    <h2 className={cn("text-[17px] font-semibold", proposal ? "border-b border-[#1e3a8a]/40 pb-1 text-[#1e3a8a]" : "text-slate-900")}>
+                      {n ? `${n}. ` : ""}
+                      {s.heading}
+                    </h2>
+                  )}
                   {proposal && i === payIndex && <Milestones d={d} total={total} />}
-                  <Body text={text} className="mt-2" num={n} />
-                  {i === invIndex && <Price d={d} total={total} />}
+                  {(() => {
+                    // "[price]" on a line of its own places the price there; otherwise it follows the text.
+                    const [before, after] = i === invIndex ? text.split(/^\s*\[price\]\s*$/m) : [text];
+                    return (
+                      <>
+                        <Body text={before} className="mt-2" num={n} />
+                        {i === invIndex && <Price d={d} total={total} />}
+                        {after !== undefined && <Body text={after} className="mt-3" num={n} />}
+                      </>
+                    );
+                  })()}
+                  {proposal && i === payIndex && d.showPaymentMethods !== false && <PaymentMethods d={d} b={b} />}
                 </section>
               </div>
             );
@@ -167,11 +183,15 @@ const numbered = (kind: DocFields["kind"]) => kind === "nda" || kind === "agreem
 /** Values worked out from the proposal, for {total}, {amcAmount}, {amcPercent}, {validDays} and {ref} in its text. */
 function proposalTokens(d: DocFields, total: number | null): Record<string, string> {
   const amc = d.amcPercent ?? DEFAULT_AMC;
+  const base = amcBase(d);
+  const rate = d.costBlocks?.[0]?.rate;
   const days = d.date && d.validUntil ? Math.round((new Date(`${d.validUntil}T00:00:00`).getTime() - new Date(`${d.date}T00:00:00`).getTime()) / 86400000) : null;
   return {
     total: total !== null ? formatCurrency(total) : "the total project cost",
     amcPercent: String(amc),
-    amcAmount: total !== null ? formatCurrency(Math.round((total * amc) / 100)) : `${amc}% of the total project cost`,
+    amcAmount: base !== null ? formatCurrency(Math.round((base * amc) / 100)) : `${amc}% of the development cost`,
+    amcBase: base !== null ? formatCurrency(base) : "the development cost",
+    rate: rate ? formatCurrency(rate) : "our hourly rate",
     validDays: days !== null && days > 0 ? String(days) : "",
     ref: `${d.number ?? ""}, Rev. ${d.version ?? 1}`,
   };
@@ -218,8 +238,8 @@ export function Body({ text, className, num }: { text: string; className?: strin
           return (
             <table key={i} className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="bg-slate-100 text-slate-900">
-                  {head.map((c, j) => <th key={j} className="border border-slate-200 px-2.5 py-1.5 font-semibold">{inline(c)}</th>)}
+                <tr>
+                  {head.map((c, j) => <th key={j} className={TH}>{inline(c)}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -262,17 +282,53 @@ function inline(text: string) {
   return parts.length === 1 ? text : parts.map((p, i) => (i % 2 ? <strong key={i} className="font-semibold text-slate-900">{p}</strong> : p));
 }
 
-/** The total project cost in a box, with the estimate's lines above it when chosen. */
+const TH = "border border-[#1e3a8a] bg-[#1e3a8a] px-2.5 py-1.5 font-semibold text-white";
+const TD = "border border-slate-200 px-2.5 py-1.5";
+const TOTAL_ROW = "bg-slate-100 font-semibold text-slate-900";
+
+/** The price: hours per task (hourly) or the estimate's lines, then the summary and the total in a box. */
 function Price({ d, total }: { d: DocFields; total: number | null }) {
-  const lines = Boolean(d.items?.length) && d.showItems !== false;
-  if (!lines && total === null) return null;
+  const hourly = isHourly(d);
+  const lines = !hourly && Boolean(d.items?.length) && d.showItems !== false;
+  if (!hourly && !lines && total === null) return null;
+  const blocks = hourly ? d.costBlocks! : [];
   return (
-    <div className="mt-4 space-y-4">
+    <div className="mt-4 space-y-5">
+      {blocks.map((b, i) => (
+        <HoursTable key={i} block={b} title={i > 0 ? b.title : ""} />
+      ))}
+      {blocks.length > 1 && (
+        <div className="print-keep">
+          <p className="text-sm font-semibold text-slate-900">Summary</p>
+          <table className="mt-1.5 w-full border-collapse text-left text-sm">
+            <thead>
+              <tr>
+                <th className={TH}>Item</th>
+                <th className={cn(TH, "text-right")}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {blocks.map((b, i) => (
+                <tr key={i}>
+                  <td className={TD}>
+                    {b.summary || b.title} ({blockHours(b)} hours{sameRate(b) ? ` × ${formatCurrency(b.rate)}` : ""})
+                  </td>
+                  <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency(blockTotal(b))}</td>
+                </tr>
+              ))}
+              <tr className={TOTAL_ROW}>
+                <td className={TD}>Total project cost</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
       {lines && <PriceTable d={d} />}
       {total !== null && (
-        <div className="print-keep rounded-xl border-2 border-slate-900 px-5 py-4 text-center">
+        <div className="print-keep rounded-xl border-2 border-[#1e3a8a] px-5 py-4 text-center">
           <p className="text-xs font-semibold tracking-widest text-slate-500 uppercase">Total project cost</p>
-          <p className="mt-1 text-3xl font-semibold text-slate-900 tabular-nums">{formatCurrency(total)}</p>
+          <p className="mt-1 text-3xl font-semibold text-[#1e3a8a] tabular-nums">{formatCurrency(total)}</p>
           <p className="mt-0.5 text-sm text-slate-600">Indian {amountInWords(total)}</p>
         </div>
       )}
@@ -280,36 +336,152 @@ function Price({ d, total }: { d: DocFields; total: number | null }) {
   );
 }
 
-/** Payment milestones with each one's amount. */
+const sameRate = (b: CostBlock) => b.rows.every((r) => r.heading || rowRate(b, r) === Number(b.rate));
+
+/** Task-wise hours, rate and amount, with group headings and a total row. */
+function HoursTable({ block: b, title }: { block: CostBlock; title: string }) {
+  const rows = b.rows.filter((r) => r.task.trim() || r.hours);
+  return (
+    <div>
+      {title && <p className="mb-1.5 text-sm font-semibold text-slate-900">{title}</p>}
+      <table className="w-full border-collapse text-left text-sm">
+        <thead className="table-header-group">
+          <tr>
+            <th className={TH}>Task</th>
+            <th className={cn(TH, "w-16 text-right")}>Hours</th>
+            <th className={cn(TH, "w-24 text-right")}>Rate / hr</th>
+            <th className={cn(TH, "w-28 text-right")}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) =>
+            r.heading ? (
+              <tr key={i} className="bg-blue-50">
+                <td colSpan={4} className={cn(TD, "font-semibold text-[#1e3a8a]")}>{r.task}</td>
+              </tr>
+            ) : (
+              <tr key={i} className="align-top">
+                <td className={TD}>{r.task}</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{Number(r.hours) || 0}</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency(rowRate(b, r))}</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency((Number(r.hours) || 0) * rowRate(b, r))}</td>
+              </tr>
+            ),
+          )}
+          <tr className={TOTAL_ROW}>
+            <td className={TD}>Total {(b.title || "development").replace(/\s*\(.*\)\s*$/, "").toLowerCase()}</td>
+            <td className={cn(TD, "text-right tabular-nums")}>{blockHours(b)}</td>
+            <td className={cn(TD, "text-right tabular-nums")}>{sameRate(b) ? formatCurrency(b.rate) : ""}</td>
+            <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency(blockTotal(b))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Payment milestones with each one's amount: per block when priced by the hour. */
 function Milestones({ d, total }: { d: DocFields; total: number | null }) {
-  const list = (d.milestones ?? []).filter((m) => m.label || m.percent);
-  if (!list.length) return null;
-  const sum = list.reduce((t, m) => t + (Number(m.percent) || 0), 0);
-  const amount = (p: number) => (total !== null ? formatCurrency(Math.round((total * p) / 100)) : "");
+  const groups: { title: string; base: number | null; list: { label: string; percent: number }[] }[] = isHourly(d)
+    ? d.costBlocks!.map((b) => ({ title: b.title, base: blockTotal(b), list: b.milestones ?? [] }))
+    : [{ title: "", base: total, list: d.milestones ?? [] }];
+  const shown = groups.map((g) => ({ ...g, list: g.list.filter((m) => m.label || m.percent) })).filter((g) => g.list.length);
+  if (!shown.length) return null;
+  const withAmounts = shown.some((g) => g.base !== null);
+  const amount = (base: number | null, p: number) => (base !== null ? formatCurrency(Math.round((base * p) / 100)) : "");
+  const many = shown.length > 1;
   return (
     <table className="print-keep mt-2 w-full border-collapse text-left text-sm">
       <thead>
-        <tr className="bg-slate-100 text-slate-900">
-          <th className="border border-slate-200 px-2.5 py-1.5 font-semibold">Milestone</th>
-          <th className="border border-slate-200 px-2.5 py-1.5 text-right font-semibold">Percentage</th>
-          {total !== null && <th className="border border-slate-200 px-2.5 py-1.5 text-right font-semibold">Amount</th>}
+        <tr>
+          <th className={TH}>Milestone</th>
+          <th className={cn(TH, "w-28 text-right")}>Percentage</th>
+          {withAmounts && <th className={cn(TH, "w-32 text-right")}>Amount</th>}
         </tr>
       </thead>
       <tbody>
-        {list.map((m, i) => (
-          <tr key={i}>
-            <td className="border border-slate-200 px-2.5 py-1.5">{m.label}</td>
-            <td className="border border-slate-200 px-2.5 py-1.5 text-right tabular-nums">{m.percent}%</td>
-            {total !== null && <td className="border border-slate-200 px-2.5 py-1.5 text-right tabular-nums">{amount(Number(m.percent) || 0)}</td>}
+        {shown.map((g, gi) => {
+          const sum = g.list.reduce((t, m) => t + (Number(m.percent) || 0), 0);
+          return [
+            ...g.list.map((m, i) => (
+              <tr key={`${gi}-${i}`}>
+                <td className={TD}>{m.label}</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{m.percent}%</td>
+                {withAmounts && <td className={cn(TD, "text-right tabular-nums")}>{amount(g.base, Number(m.percent) || 0)}</td>}
+              </tr>
+            )),
+            (!many || gi === 0) && (
+              <tr key={`${gi}-t`} className={TOTAL_ROW}>
+                <td className={TD}>{many ? `${(g.title || "Development").replace(/\s*\(.*\)\s*$/, "")} total` : "Total"}</td>
+                <td className={cn(TD, "text-right tabular-nums")}>{sum}%</td>
+                {withAmounts && <td className={cn(TD, "text-right tabular-nums")}>{amount(g.base, sum)}</td>}
+              </tr>
+            ),
+          ];
+        })}
+        {many && (
+          <tr className={TOTAL_ROW}>
+            <td className={TD}>Grand total</td>
+            <td className={TD} />
+            {withAmounts && <td className={cn(TD, "text-right tabular-nums")}>{formatCurrency(total)}</td>}
           </tr>
-        ))}
-        <tr className="font-semibold text-slate-900">
-          <td className="border border-slate-200 px-2.5 py-1.5">Total</td>
-          <td className="border border-slate-200 px-2.5 py-1.5 text-right tabular-nums">{sum}%</td>
-          {total !== null && <td className="border border-slate-200 px-2.5 py-1.5 text-right tabular-nums">{amount(sum)}</td>}
-        </tr>
+        )}
       </tbody>
     </table>
+  );
+}
+
+/** Bank and UPI details from Settings, with a QR code for UPI apps. */
+function PaymentMethods({ d, b }: { d: DocFields; b: Business }) {
+  const bank = [
+    { label: "Account name", value: b.accountName },
+    { label: "Bank", value: b.bankName },
+    { label: "Account number", value: b.accountNumber },
+    { label: "IFSC", value: b.ifsc },
+  ].filter((r) => r.value);
+  const upi = b.upiId?.trim();
+  if (!bank.length && !upi) return null;
+  const upiLink = upi ? `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent(b.accountName || b.name)}&cu=INR${d.number ? `&tn=${encodeURIComponent(d.number)}` : ""}` : "";
+  return (
+    <div className="print-keep mt-5">
+      <p className="text-sm font-semibold text-slate-900">Payment methods</p>
+      <div className="mt-1.5 flex flex-col gap-5 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-start">
+        <div className="min-w-0 flex-1 space-y-4">
+          {bank.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-[#1e3a8a]">Bank transfer</p>
+              <table className="mt-1.5 w-full border-collapse text-left text-sm">
+                <tbody>
+                  {bank.map((r) => (
+                    <tr key={r.label}>
+                      <td className={cn(TD, "w-36 text-slate-500")}>{r.label}</td>
+                      <td className={cn(TD, "font-semibold text-slate-900")}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {upi && (
+            <div>
+              <p className="text-sm font-semibold text-[#1e3a8a]">UPI</p>
+              <p className="mt-1 text-sm text-slate-700">
+                UPI ID: <strong className="font-semibold text-slate-900">{upi}</strong> (scan the QR code with any UPI app)
+              </p>
+            </div>
+          )}
+          <p className="text-xs text-slate-500">
+            Please mention the quotation number{d.number ? ` ${d.number}` : ""} as the payment reference and share the payment confirmation with us.
+          </p>
+        </div>
+        {upi && (
+          <figure className="shrink-0 self-center text-center">
+            <QrCode value={upiLink} size={150} />
+            <figcaption className="mt-1 text-xs text-slate-500">Scan to pay · {upi}</figcaption>
+          </figure>
+        )}
+      </div>
+    </div>
   );
 }
 

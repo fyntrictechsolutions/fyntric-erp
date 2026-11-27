@@ -2,6 +2,7 @@ import { Building2, Handshake, Target } from "lucide-react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createRecord, deleteRecord, updateRecord } from "@/lib/records";
+import { moveLeadDocsToClient } from "@/lib/salesDocs";
 import { nowTime, todayISO } from "@/lib/format";
 import type { ModuleDefinition } from "./types";
 
@@ -96,7 +97,10 @@ export const leadsModule: ModuleDefinition = {
           },
           profile,
         );
-        await updateRecord("leads", lead.id, { stage: "won", clientId: client.id, clientIdLabel: (lead.company as string) || (lead.name as string) });
+        const label = (lead.company as string) || (lead.name as string);
+        await updateRecord("leads", lead.id, { stage: "won", clientId: client.id, clientIdLabel: label });
+        // The lead's documents (NDA, SOW…) now belong to the client too: the same records, shown on both pages.
+        await moveLeadDocsToClient(lead.id, client.id, label).catch(() => undefined);
       },
     },
   ],
@@ -114,6 +118,7 @@ export const clientsModule: ModuleDefinition = {
   description: "Companies you work with and their contact details.",
   icon: Building2,
   href: "/crm/clients",
+  detailHref: (id) => `/crm/clients/view?id=${id}`,
   statusField: "status",
   searchFields: ["name", "contactPerson", "email", "city", "industry"],
   columns: ["name", "contactPerson", "email", "phone", "city", "status"],

@@ -129,6 +129,8 @@ body {
     padding: 0 !important;
     color: #0b1020 !important;
     background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
   .print-sheet tr,
   .print-keep {

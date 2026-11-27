@@ -1,5 +1,5 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import type { LineItem } from "@/config/modules/types";
 import type { BusinessSettings } from "@/config/settingsDefaults";
 import { docNumber } from "@/config/modules/options";
@@ -48,6 +48,38 @@ export interface Milestone {
   percent: number;
 }
 
+export interface CostRow {
+  task: string;
+  hours?: number;
+  /** Only when it differs from the block's rate. */
+  rate?: number | null;
+  /** A group heading such as "A. Project management" (no hours). */
+  heading?: boolean;
+}
+
+export interface CostBlock {
+  /** e.g. "Development" or "Product data upload (separate service, after development)". */
+  title: string;
+  /** How it reads in the summary, e.g. "Development, branding and AI features". */
+  summary: string;
+  /** Rate per hour for its tasks. */
+  rate: number;
+  rows: CostRow[];
+  /** Payment milestones for this block, as a share of its total. */
+  milestones: Milestone[];
+  /** Counts towards the AMC (the development work, not one-off services). */
+  amc: boolean;
+}
+
+export interface SignedFile {
+  name: string;
+  url: string;
+  path: string;
+  contentType: string;
+  uploadedAt: number;
+  uploadedBy: string;
+}
+
 export interface DocImage {
   url: string;
   path: string;
@@ -93,6 +125,14 @@ export interface DocFields {
   milestones?: Milestone[];
   /** Proposals: yearly maintenance from the second year, as % of the total. */
   amcPercent?: number | null;
+  /** Proposals: "hourly" prices from the task-wise hours below; "fixed" uses the typed total or the estimate. */
+  pricing?: "hourly" | "fixed";
+  /** Proposals, hourly pricing: one block for development, and more for separate services (e.g. data upload). */
+  costBlocks?: CostBlock[];
+  /** Proposals: show the bank and UPI details (from Settings) under Payment terms. */
+  showPaymentMethods?: boolean;
+  /** Signed copies the client sent back (scans or photos), kept with the document. Never shared. */
+  signedFiles?: SignedFile[];
   /** Proposals: revision 1, 2, 3… and the one it replaced. */
   version?: number;
   previousId?: string | null;
@@ -148,8 +188,68 @@ export const DEFAULT_SUBTITLE = "Scope of Work & Commercial Quotation";
 export const DEFAULT_AMC = 15;
 const VALID_DAYS = 15;
 
-/** The proposal's total: the typed-in price, or else the estimate's one-time total. */
-export function proposalTotal(d: Pick<DocFields, "totalPrice" | "items" | "discountOnce">): number | null {
+const T = (task: string, hours: number): CostRow => ({ task, hours });
+const H = (task: string): CostRow => ({ task, heading: true });
+
+export const DEFAULT_COST_BLOCKS: CostBlock[] = [
+  {
+    title: "Development",
+    summary: "Design, development and launch",
+    rate: 650,
+    amc: true,
+    milestones: DEFAULT_MILESTONES,
+    rows: [
+      H("A. Project management & discovery"),
+      T("Requirement finalization, SRS and project planning", 16),
+      T("Project management, client meetings and progress reporting (throughout)", 30),
+      H("B. UI/UX design"),
+      T("UI/UX design: customer app", 32),
+      T("UI/UX design: admin app", 14),
+      H("C. Backend, APIs & database"),
+      T("Architecture, database design and cloud environment setup", 20),
+      T("Authentication, OTP, user roles and role-based access", 16),
+      T("Core modules and business logic", 40),
+      T("Payment gateway and notifications", 24),
+      H("D. Apps"),
+      T("Customer app (Android & iOS)", 60),
+      T("Admin app", 40),
+      H("E. Testing, launch & handover"),
+      T("Functional, integration and device testing, bug fixing", 48),
+      T("UAT support and performance optimization", 16),
+      T("Cloud deployment, store submission and handover documentation", 16),
+    ],
+  },
+];
+
+/** A separate service priced on its own (e.g. data upload after development). */
+export const NEW_SERVICE_BLOCK: CostBlock = {
+  title: "Product data upload (separate service, after development)",
+  summary: "Product data upload",
+  rate: 250,
+  amc: false,
+  milestones: [
+    { label: "Product data upload: 50% at start of upload", percent: 50 },
+    { label: "Product data upload: 50% on completion", percent: 50 },
+  ],
+  rows: [T("Data cleaning, category mapping, image linking and bulk upload, with spot checks", 100)],
+};
+
+export const rowRate = (b: CostBlock, r: CostRow) => (r.rate !== undefined && r.rate !== null && !Number.isNaN(Number(r.rate)) ? Number(r.rate) : Number(b.rate) || 0);
+export const blockHours = (b: CostBlock) => b.rows.reduce((t, r) => t + (r.heading ? 0 : Number(r.hours) || 0), 0);
+export const blockTotal = (b: CostBlock) => b.rows.reduce((t, r) => t + (r.heading ? 0 : (Number(r.hours) || 0) * rowRate(b, r)), 0);
+
+/** Whether this proposal is priced from task-wise hours. */
+export const isHourly = (d: Pick<DocFields, "pricing" | "costBlocks">) => d.pricing === "hourly" && Boolean(d.costBlocks?.length);
+
+/** The base for the AMC: development blocks when priced by the hour, otherwise the total. */
+export function amcBase(d: Pick<DocFields, "pricing" | "costBlocks" | "totalPrice" | "items" | "discountOnce">): number | null {
+  if (isHourly(d)) return d.costBlocks!.filter((b) => b.amc).reduce((t, b) => t + blockTotal(b), 0);
+  return proposalTotal(d);
+}
+
+/** The proposal's total: the hours × rates, or the typed-in price, or else the estimate's one-time total. */
+export function proposalTotal(d: Pick<DocFields, "pricing" | "costBlocks" | "totalPrice" | "items" | "discountOnce">): number | null {
+  if (isHourly(d)) return d.costBlocks!.reduce((t, b) => t + blockTotal(b), 0);
   if (d.totalPrice !== undefined && d.totalPrice !== null && !Number.isNaN(Number(d.totalPrice))) return Number(d.totalPrice);
   const once = groupedTotals(d.items ?? [], { once: d.discountOnce }).find((g) => g.key === "once");
   return once ? once.total : null;
@@ -221,9 +321,9 @@ export function defaultSections(kind: DocKind): Section[] {
         S("Project timeline", "Target completion is within 90 days from project initiation (receipt of advance payment and finalized requirements).\n\n| Phase | Timeline | Key activities |\n| Month 1 | Days 1–30 | Requirement finalization, UI/UX design, architecture, database design, backend and API foundation, progress review. |\n| Month 2 | Days 31–60 | Core app features, admin features, payment gateway integration. |\n| Month 3 | Days 61–90 | Full system testing and bug fixing, UAT, cloud deployment, store submission and production launch. |\n\n> The timeline depends on timely approvals, feedback and inputs from the Client, and on access to third-party accounts (payment gateway, SMS, developer accounts). App store review times are controlled by Apple and Google."),
         S("Client responsibilities & assumptions", "- Provide brand assets (logo, colours), app content and policies (returns, delivery, privacy).\n- Create or provide access to the Apple Developer, Google Play, payment gateway, SMS / OTP and cloud hosting accounts.\n- Nominate one point of contact for approvals; give feedback on designs and builds within 3 working days.\n- Design approval is final; changes after approval may affect the timeline and cost."),
         S("Change requests & acceptance", "- Any work outside this SOW will be charged extra. It will be estimated separately and taken up only after the Client approves its cost and timeline impact in writing.\n- **Small improvements:** small improvements not described in this SOW, but related to items within this scope and needed to make those items fully usable, will be done free of cost during the free support period.\n- **New features:** any request that can reasonably be counted as a new feature, or as an enhancement beyond making an in-scope item usable, will be charged extra.\n- Each milestone is shared for review. If no issues are reported within 5 working days of delivery, the milestone is considered accepted.\n- Bugs against the approved scope found during UAT will be fixed before launch at no extra cost."),
-        S("Project investment", "All modules and deliverables described in the scope of work and technical deliverables are included in the project price, subject to this approved scope."),
+        S("Project investment (hourly breakdown)", "The project is priced on an hourly basis. The table below shows the estimated hours for each task at a blended rate of **{rate} per hour** (design, development, testing and project management).\n\n[price]\n\n> Hours are estimates for the scope in this document and the price above is fixed for that scope. Change requests and out-of-scope work will be estimated and billed at the same hourly rates."),
         S("Payment terms", "Payments are due within 7 days of each milestone invoice. Work on the next milestone starts after the previous payment is received."),
-        S("Support, maintenance & AMC", "## First year: free support (included)\n12 months of cost-free support and maintenance from the production launch date, within the approved scope:\n\n- Bug fixing, application troubleshooting and API troubleshooting.\n- Technical support and assistance; database issue support.\n- Security updates, performance monitoring support and stability support.\n- Minor software updates and OS-compatibility fixes.\n\n> Support does not cover new features, design changes, third-party service charges or issues caused by changes made by others to the code or servers.\n\n## From the second year: Annual Maintenance Contract (AMC)\nFrom the second year onwards, any support will be provided under an Annual Maintenance Contract at {amcPercent}% of the total project cost per year, i.e. {amcAmount} per year ({amcPercent}% of {total}), payable in advance for each year. The AMC covers the same support items listed above. New features remain chargeable separately."),
+        S("Support, maintenance & AMC", "## First year: free support (included)\n12 months of cost-free support and maintenance from the production launch date, within the approved scope:\n\n- Bug fixing, application troubleshooting and API troubleshooting.\n- Technical support and assistance; database issue support.\n- Security updates, performance monitoring support and stability support.\n- Minor software updates and OS-compatibility fixes.\n\n> Support does not cover new features, design changes, third-party service charges or issues caused by changes made by others to the code or servers.\n\n## From the second year: Annual Maintenance Contract (AMC)\nFrom the second year onwards, any support will be provided under an Annual Maintenance Contract at **{amcPercent}% of the development cost per year**, i.e. **{amcAmount} per year** ({amcPercent}% of {amcBase}), payable in advance for each year. The AMC covers the same support items listed above. New features remain chargeable separately."),
         S("Third-party costs (payable by the client)", "This quotation covers development only. All third-party subscriptions, services and usage charges required to build, run and publish the platform are to be paid by the Client, directly or reimbursed to us at actual cost. These include, but are not limited to:\n\n- Domain registration and renewal.\n- Cloud server, hosting, storage, database and backup charges.\n- SMS / OTP and WhatsApp Business API charges.\n- Payment gateway setup and transaction fees.\n- AI / LLM API charges, where used.\n- Maps, email, push notification or any other third-party API charges.\n- Apple Developer Account and Google Play Developer Account fees.\n- Any other third-party subscriptions, licences or paid plugins."),
         S("General terms", "- **Ownership:** on receipt of full payment, the Client owns the application source code and data developed for this project.\n- **Confidentiality:** both parties will keep each other's business information confidential.\n- **Validity:** this quotation is valid for {validDays} days from the date of issue."),
       ];
@@ -294,7 +394,7 @@ function placeholders(ctx: DealContext, business: BusinessSettings, date: string
 }
 
 /** Proposal terms kept on the template besides its sections. */
-const PROPOSAL_TERMS = ["subtitle", "facts", "milestones", "amcPercent"] as const;
+const PROPOSAL_TERMS = ["subtitle", "facts", "milestones", "amcPercent", "pricing", "costBlocks", "showPaymentMethods"] as const;
 
 async function templateFor(kind: DocKind): Promise<{ sections: Section[]; terms: Partial<DocFields> }> {
   const snap = await getDoc(doc(db(), "documents", templateId(kind))).catch(() => null);
@@ -308,7 +408,7 @@ async function templateFor(kind: DocKind): Promise<{ sections: Section[]; terms:
 }
 
 function proposalDefaults(): Partial<DocFields> {
-  return { subtitle: DEFAULT_SUBTITLE, facts: DEFAULT_FACTS, milestones: DEFAULT_MILESTONES, amcPercent: DEFAULT_AMC };
+  return { subtitle: DEFAULT_SUBTITLE, facts: DEFAULT_FACTS, milestones: DEFAULT_MILESTONES, amcPercent: DEFAULT_AMC, pricing: "hourly", costBlocks: DEFAULT_COST_BLOCKS, showPaymentMethods: true };
 }
 
 /** "YYYY-MM-DD" plus some days. */
@@ -428,8 +528,8 @@ export async function deleteDocument(d: SalesDoc) {
 
 /** A new revision of a proposal: the same content as version n+1; the old one is marked replaced. */
 export async function reviseProposal(d: SalesDoc, profile: UserProfile): Promise<string> {
-  const { id, shareToken, sharedAt, signedBy, signedOn, signedTitle, createdAt, updatedAt, userId, userName, createdBy, ...rest } = d;
-  void shareToken; void sharedAt; void signedBy; void signedOn; void signedTitle; void createdAt; void updatedAt; void userId; void userName; void createdBy;
+  const { id, shareToken, sharedAt, signedBy, signedOn, signedTitle, signedFiles, createdAt, updatedAt, userId, userName, createdBy, ...rest } = d;
+  void shareToken; void sharedAt; void signedBy; void signedOn; void signedTitle; void signedFiles; void createdAt; void updatedAt; void userId; void userName; void createdBy;
   const ref = await loggedAdd(collection(db(), "documents"), { ...rest, status: "draft", version: (d.version ?? 1) + 1, previousId: id, date: todayISO(), validUntil: addDays(todayISO(), VALID_DAYS), revisionNote: "", shareToken: null, sharedAt: null, ...stamp(profile) });
   await saveDoc(id, { status: "superseded" });
   return ref.id;
@@ -447,11 +547,40 @@ export async function uploadImage(docId: string, file: File): Promise<DocImage> 
   return { url: await getDownloadURL(target), path, caption: "" };
 }
 
+// ---------- Signed copies ----------
+
+const SIGNED_TYPES = /^(application\/pdf|image\/.*)$/;
+
+/** Saves a signed copy the client sent back (PDF, scan or photo, up to 20 MB) with the document. */
+export async function uploadSignedCopy(d: Pick<SalesDoc, "id" | "signedFiles">, file: File, profile: UserProfile): Promise<SignedFile> {
+  if (!SIGNED_TYPES.test(file.type)) throw new Error(`${file.name}: upload a PDF or an image (scan or photo).`);
+  if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name} is larger than 20 MB.`);
+  const path = `documents/${d.id}/signed/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_").slice(-80)}`;
+  const target = ref(storage(), path);
+  await uploadBytes(target, file, { contentType: file.type });
+  const saved: SignedFile = { name: file.name, url: await getDownloadURL(target), path, contentType: file.type, uploadedAt: Date.now(), uploadedBy: profile.displayName };
+  return saved;
+}
+
+export async function removeSignedCopy(d: Pick<SalesDoc, "id" | "signedFiles">, f: SignedFile) {
+  await deleteObject(ref(storage(), f.path)).catch(() => undefined);
+  await saveDoc(d.id, { signedFiles: (d.signedFiles ?? []).filter((x) => x.path !== f.path) });
+}
+
+// ---------- Leads that become clients ----------
+
+/** When a lead becomes a client, its documents belong to the client too (same records, now shown on both). */
+export async function moveLeadDocsToClient(leadId: string, clientId: string, clientLabel: string) {
+  const snap = await getDocs(query(collection(db(), "documents"), where("leadId", "==", leadId)));
+  await Promise.all(snap.docs.filter((d) => !d.get("clientId")).map((d) => updateDoc(d.ref, { clientId, clientIdLabel: clientLabel, updatedAt: Date.now() })));
+}
+
 // ---------- Sharing ----------
 
 export interface SharedCopy {
   doc: DocFields;
-  business: Pick<BusinessSettings, "name" | "address" | "phone" | "email" | "website" | "gstin" | "logo">;
+  business: Pick<BusinessSettings, "name" | "address" | "phone" | "email" | "website" | "gstin" | "logo"> &
+    Partial<Pick<BusinessSettings, "upiId" | "bankName" | "accountName" | "accountNumber" | "ifsc">>;
   /** Company profile: the case studies shown as portfolio highlights. */
   highlights?: { title: string; summary?: string; image?: string | null; link?: string | null }[];
   sharedAt: number;
@@ -468,11 +597,22 @@ export const shareUrl = (token: string) => `${typeof window === "undefined" ? ""
 /** Publishes (or refreshes) the read-only copy behind the document's link, and returns the link. */
 export async function shareDoc(d: SalesDoc, business: BusinessSettings, highlights?: SharedCopy["highlights"]): Promise<string> {
   const token = d.shareToken || newToken();
-  const { id, shareToken, userId, createdBy, ...content } = d;
-  void id; void shareToken; void userId; void createdBy;
+  // Signed copies stay inside the app.
+  const { id, shareToken, userId, createdBy, signedFiles, ...content } = d;
+  void id; void shareToken; void userId; void createdBy; void signedFiles;
+  const pay = d.kind === "proposal" && d.showPaymentMethods !== false;
   const copy: SharedCopy = {
     doc: JSON.parse(JSON.stringify(content)),
-    business: { name: business.name, address: business.address, phone: business.phone, email: business.email, website: business.website, gstin: business.gstin, logo: business.logo },
+    business: {
+      name: business.name,
+      address: business.address,
+      phone: business.phone,
+      email: business.email,
+      website: business.website,
+      gstin: business.gstin,
+      logo: business.logo,
+      ...(pay ? { upiId: business.upiId, bankName: business.bankName, accountName: business.accountName, accountNumber: business.accountNumber, ifsc: business.ifsc } : {}),
+    },
     ...(highlights ? { highlights } : {}),
     sharedAt: Date.now(),
   };
