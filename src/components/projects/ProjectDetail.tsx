@@ -18,6 +18,7 @@ import { moduleAccess } from "@/lib/access";
 import { db } from "@/lib/firebase";
 import { TASK_COLUMNS, type ChecklistEntry, type ProjectAsset, type ProjectTask } from "@/lib/projectWork";
 import type { BaseRecord } from "@/types";
+import { DealDocuments } from "@/components/documents/DealDocuments";
 import { DeliveryChecklist } from "./DeliveryChecklist";
 import { ProjectAssets } from "./ProjectAssets";
 import { TaskBoard } from "./TaskBoard";
@@ -28,7 +29,7 @@ export function ProjectDetailPage() {
   return <WithRecordId>{(id) => <ProjectDetail id={id} />}</WithRecordId>;
 }
 
-type Tab = "summary" | "tasks" | "assets" | "checklist";
+type Tab = "summary" | "tasks" | "assets" | "checklist" | "documents";
 
 /** The team's lists under a project: everyone inside the company sees them; clients see the summary only. */
 const SEES_WORK: Role[] = [...INTERNAL_ROLES, "investor", "viewer"];
@@ -56,6 +57,8 @@ function ProjectDetail({ id }: { id: string }) {
   // Hours logged: only people who see everyone's timesheets.
   const seesHours = role === "admin" || role === "project_manager";
   const hours = useRecordsWhere("timesheets", "projectId", seesHours ? id : null);
+  const seesDocs = canRead(role, "documents");
+  const { data: client } = useRecord("clients", seesDocs && canRead(role, "clients") ? ((project?.clientId as string | undefined) ?? null) : null);
 
   if (loading) return <Loading />;
   if (!project) return <NotFound what="project" />;
@@ -90,6 +93,7 @@ function ProjectDetail({ id }: { id: string }) {
             { value: "tasks", label: `Task planner${tasks.data.length ? ` (${tasks.data.length})` : ""}` },
             { value: "assets", label: `Assets${assets.data.length ? ` (${assets.data.length})` : ""}` },
             { value: "checklist", label: "Delivery checklist" },
+            ...(seesDocs ? [{ value: "documents" as const, label: "Documents" }] : []),
           ]}
           value={tab}
           onChange={setTab}
@@ -110,6 +114,23 @@ function ProjectDetail({ id }: { id: string }) {
         <TaskBoard {...work} tasks={tasks.data} loading={tasks.loading} />
       ) : tab === "assets" ? (
         <ProjectAssets {...work} assets={assets.data} loading={assets.loading} />
+      ) : tab === "documents" ? (
+        <DealDocuments
+          kinds={["proposal", "agreement", "nda", "questionnaire"]}
+          ctx={{
+            projectId: id,
+            projectIdLabel: String(project.name ?? ""),
+            clientId: (project.clientId as string | undefined) ?? null,
+            clientIdLabel: (project.clientIdLabel as string | undefined) ?? null,
+            party: {
+              name: String(client?.name ?? project.clientIdLabel ?? ""),
+              contact: String(client?.contactPerson ?? ""),
+              address: String(client?.address ?? ""),
+              phone: String(client?.phone ?? ""),
+              email: String(client?.email ?? ""),
+            },
+          }}
+        />
       ) : (
         <DeliveryChecklist {...work} items={checklist.data} loading={checklist.loading} />
       )}

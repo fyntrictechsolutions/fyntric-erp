@@ -134,4 +134,26 @@ body {
   .print-keep {
     break-inside: avoid;
   }
+  /* Sales documents (proposals, NDAs, agreements): page numbers at the foot of each page. */
+  .doc-paged {
+    page: paged-doc;
+  }
+  .doc-paged h2,
+  .doc-paged h3 {
+    break-after: avoid;
+  }
+}
+@page paged-doc {
+  size: A4;
+  margin: 12mm 12mm 16mm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 9px;
+    color: #64748b;
+  }
+  @bottom-left {
+    content: "Confidential";
+    font-size: 9px;
+    color: #64748b;
+  }
 }

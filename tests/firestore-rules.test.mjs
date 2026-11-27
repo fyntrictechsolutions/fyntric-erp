@@ -434,6 +434,30 @@ describe("module access by role", () => {
     assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/other/x"), item(pm))), false);
     assert.equal(await allowed(deleteDoc(doc(pm.db, "projects/p1/tasks/t2"))), true);
   });
+  test("sales documents: sales and admin write, PM reads, others nothing; shared copies open by link only", async () => {
+    const sales = users.sales;
+    const d = { kind: "proposal", title: "Proposal", status: "draft", sections: [], userId: sales.uid, createdBy: sales.uid, createdAt: 1 };
+    assert.equal(await allowed(setDoc(doc(sales.db, "documents/d1"), d)), true);
+    assert.equal(await allowed(updateDoc(doc(sales.db, "documents/d1"), { status: "sent" })), true);
+    assert.equal(await allowed(getDoc(doc(users.project_manager.db, "documents/d1"))), true);
+    assert.equal(await allowed(updateDoc(doc(users.project_manager.db, "documents/d1"), { status: "signed" })), false);
+    for (const r of ["staff", "hr_manager", "client", "investor"]) assert.equal(await allowed(getDoc(doc(users[r].db, "documents/d1"))), false, r);
+    assert.equal(await allowed(setDoc(doc(sales.db, "documents/company-profile"), { ...d, kind: "profile" })), true);
+    assert.equal(await allowed(deleteDoc(doc(sales.db, "documents/company-profile"))), false);
+    // Shared copies: anyone with the token reads it, even signed out; nobody lists them; only sales/admin write.
+    const token = "abcdefghijklmnopqrstuvwxyz12";
+    assert.equal(await allowed(setDoc(doc(sales.db, "shared", token), { doc: d, sharedAt: 1 })), true);
+    assert.equal(await allowed(setDoc(doc(users.staff.db, "shared", token + "x"), { doc: d })), false);
+    assert.equal(await allowed(setDoc(doc(sales.db, "shared", "short"), { doc: d })), false);
+    const anonApp = initializeApp({ apiKey: "demo", projectId: PROJECT }, `anon-${Math.random()}`);
+    apps.push(anonApp);
+    const anon = getFirestore(anonApp);
+    connectFirestoreEmulator(anon, "127.0.0.1", 8080);
+    assert.equal(await allowed(getDoc(doc(anon, "shared", token))), true);
+    assert.equal(await allowed(getDocs(collection(anon, "shared"))), false);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "shared"))), false);
+    assert.equal(await allowed(setDoc(doc(anon, "shared", token), { doc: {} })), false);
+  });
   test("nobody can reassign ownership of a record", async () => {
     assert.equal(await allowed(updateDoc(doc(users.admin.db, "invoices", "i1"), { userId: users.admin.uid })), false);
   });

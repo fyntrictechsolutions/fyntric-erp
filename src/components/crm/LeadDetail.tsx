@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound, WithRecordId } from "@/components/common/DetailShell";
+import { DealDocuments } from "@/components/documents/DealDocuments";
 import { FieldValue } from "@/components/resource/FieldValue";
 import { QuickSelect } from "@/components/resource/QuickSelect";
 import { NoAccess } from "@/components/resource/ModulePage";
@@ -222,6 +223,26 @@ function LeadDetail({ id }: { id: string }) {
           )}
         </Card>
       )}
+
+      <div className="mt-6">
+        <DealDocuments
+          intro
+          services={asList(lead.service)}
+          ctx={{
+            leadId: lead.id,
+            leadIdLabel: String(lead.name ?? ""),
+            clientId: (lead.clientId as string | undefined) ?? null,
+            clientIdLabel: (lead.clientIdLabel as string | undefined) ?? null,
+            party: {
+              name: String(lead.company || lead.name || ""),
+              contact: String(lead.name ?? ""),
+              address: String(lead.address ?? ""),
+              phone: String(lead.phone ?? ""),
+              email: String(lead.email ?? ""),
+            },
+          }}
+        />
+      </div>
 
       {editing?.kind === "lead" && <RecordEditor module={leadsModule} record={lead} onClose={close} />}
       {editing?.kind === "followup" && (
