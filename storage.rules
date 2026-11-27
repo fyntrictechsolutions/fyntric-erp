@@ -44,6 +44,15 @@ service firebase.storage {
       allow delete: if hasRole(['admin', 'sales']);
     }
 
+    // Signed copies the client sent back (PDF, scan or photo): documents/{docId}/signed/{file}.
+    // Only inside the app; never part of a shared link.
+    match /documents/{docId}/signed/{name} {
+      allow read: if hasRole(['admin', 'project_manager', 'sales']);
+      allow create, update: if hasRole(['admin', 'sales']) && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/.*');
+      allow delete: if hasRole(['admin', 'sales']);
+    }
+
     // Nothing else is stored.
     match /{path=**} {
       allow read, write: if false;

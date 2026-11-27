@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowDown, ArrowUp, CheckCircle2, CopyPlus, ImagePlus, Pencil, Plus, Printer, Share2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, CopyPlus, FileCheck2, ImagePlus, Pencil, Plus, Printer, Share2, Trash2, Upload, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
@@ -20,8 +21,9 @@ import { moduleAccess } from "@/lib/access";
 import { cn } from "@/lib/cn";
 import { formatDate, todayISO } from "@/lib/format";
 import { discountsOf, groupedTotals } from "@/lib/lineItems";
-import { deleteDocument, highlightsFrom, KINDS, PROFILE_ID, reviseProposal, saveDoc, statusLabel, statusTone, uploadImage, type DocImage, type Fact, type Milestone, type SalesDoc, type Section } from "@/lib/salesDocs";
+import { deleteDocument, highlightsFrom, KINDS, PROFILE_ID, removeSignedCopy, reviseProposal, saveDoc, statusLabel, statusTone, uploadImage, uploadSignedCopy, DEFAULT_COST_BLOCKS, type CostBlock, type DocImage, type Fact, type Milestone, type SalesDoc, type Section, type SignedFile } from "@/lib/salesDocs";
 import { DocumentSheet } from "./DocumentSheet";
+import { CostBlocksEditor, MilestonesEditor } from "./PricingEditor";
 import { ShareDialog, useCaseStudies } from "./ShareDialog";
 
 export function DocumentViewPage() {
@@ -48,7 +50,13 @@ function DocumentView({ id }: { id: string }) {
   const canEdit = moduleAccess("documents", profile).isManager;
   const isTemplate = Boolean(d.template) && d.id !== PROFILE_ID;
   const deal = !d.template && d.kind !== "case_study";
-  const back = d.leadId ? { href: `/crm/leads/view?id=${d.leadId}`, label: String(d.leadIdLabel ?? "Lead") } : d.projectId ? { href: `/projects/view?id=${d.projectId}`, label: String(d.projectIdLabel ?? "Project") } : { href: "/crm/documents", label: "Documents" };
+  // One record, reachable from the lead, the client and the project it belongs to.
+  const links = [
+    d.leadId && { href: `/crm/leads/view?id=${d.leadId}`, kind: "Lead", label: String(d.leadIdLabel || "Lead") },
+    d.clientId && { href: `/crm/clients/view?id=${d.clientId}`, kind: "Client", label: String(d.clientIdLabel || "Client") },
+    d.projectId && { href: `/projects/view?id=${d.projectId}`, kind: "Project", label: String(d.projectIdLabel || "Project") },
+  ].filter(Boolean) as { href: string; kind: string; label: string }[];
+  const back = links[0] ?? { href: "/crm/documents", label: "Documents" };
   const to = { name: d.party?.contact || d.party?.name, phone: d.party?.phone, email: d.party?.email };
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -75,6 +83,16 @@ function DocumentView({ id }: { id: string }) {
               {isTemplate ? "Template: new documents start with this wording. {client}, {project}, {date} and the like are filled in." : [KINDS[d.kind].label, d.number, d.version && d.version > 1 ? `Revision ${d.version}` : null, d.party?.name].filter(Boolean).join(" · ")}
               {d.signedOn ? ` · ${statusLabel(d)} by ${d.signedBy ?? ""} on ${formatDate(d.signedOn)}` : ""}
             </p>
+            {links.length > 1 && (
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
+                {links.map((l) => (
+                  <span key={l.kind}>
+                    {l.kind}:{" "}
+                    <Link href={l.href} className="font-medium text-accent hover:underline">{l.label}</Link>
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
           {!editing && (
             <div className="flex flex-wrap items-center gap-2">
@@ -108,6 +126,9 @@ function DocumentView({ id }: { id: string }) {
         </div>
         {error && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
         {d.status === "superseded" && <p className="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">A newer revision of this proposal replaces this one.</p>}
+        {deal && !editing && (d.kind !== "questionnaire" || (d.signedFiles?.length ?? 0) > 0) && (
+          <SignedCopies d={d} canEdit={canEdit} onUpload={() => setSigning(true)} onError={setError} />
+        )}
       </div>
 
       {editing ? (
@@ -135,36 +156,99 @@ function DocumentView({ id }: { id: string }) {
   );
 }
 
+/** Lists the signed copies the client sent back (scans, photos or PDFs); they stay inside the app. */
+function SignedCopies({ d, canEdit, onUpload, onError }: { d: SalesDoc; canEdit: boolean; onUpload: () => void; onError: (e: string | null) => void }) {
+  const files = d.signedFiles ?? [];
+  if (!files.length && (!canEdit || d.status === "superseded")) return null;
+  return (
+    <Card className="mb-6 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-base font-semibold text-foreground">Signed copy</h2>
+          <p className="text-sm text-muted">
+            {files.length ? "The copy the client signed and sent back. Only your team can open it." : "When the client signs on paper and sends a scan or photo, upload it here. It's kept with this document."}
+          </p>
+        </div>
+        {canEdit && d.status !== "superseded" && (
+          <Button size="sm" variant="secondary" onClick={onUpload}>
+            <Upload className="size-4" /> Upload signed copy
+          </Button>
+        )}
+      </div>
+      {files.length > 0 && (
+        <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+          {files.map((f) => (
+            <li key={f.path} className="flex items-center gap-3 px-3 py-2 text-sm">
+              <FileCheck2 className="size-4 shrink-0 text-emerald-600" aria-hidden />
+              <a href={f.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-accent hover:underline">{f.name}</a>
+              <span className="hidden shrink-0 text-xs text-subtle sm:inline">{f.uploadedBy} · {formatDate(f.uploadedAt)}</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  className="rounded p-1 text-subtle hover:text-red-600"
+                  aria-label={`Remove ${f.name}`}
+                  onClick={() => {
+                    if (!window.confirm(`Remove ${f.name}?`)) return;
+                    onError(null);
+                    removeSignedCopy(d, f).catch((e) => onError(friendlyError(e)));
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** Records who signed (or accepted) it and when, with the signed scan if there is one. */
 function SignDialog({ d, onClose }: { d: SalesDoc; onClose: () => void }) {
-  const [name, setName] = useState(d.party?.contact ?? "");
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(todayISO());
+  const profile = useProfile();
+  const [name, setName] = useState(d.signedBy ?? d.party?.contact ?? "");
+  const [title, setTitle] = useState(d.signedTitle ?? "");
+  const [date, setDate] = useState(d.signedOn ?? todayISO());
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const word = KINDS[d.kind].signed.toLowerCase();
   const save = async () => {
+    setSaving(true);
+    setError(null);
     try {
-      await saveDoc(d.id, { status: "signed", signedBy: name.trim(), signedTitle: title.trim() || null, signedOn: date });
+      const added: SignedFile[] = [];
+      for (const f of files) added.push(await uploadSignedCopy(d, f, profile));
+      await saveDoc(d.id, {
+        status: "signed",
+        signedBy: name.trim(),
+        signedTitle: title.trim() || null,
+        signedOn: date,
+        ...(added.length ? { signedFiles: [...(d.signedFiles ?? []), ...added] } : {}),
+      });
       onClose();
     } catch (e) {
       setError(friendlyError(e));
+      setSaving(false);
     }
   };
   return (
     <Modal
       open
       onClose={onClose}
-      title={`Mark ${word}`}
+      title={d.status === "signed" ? "Signed copy" : `Mark ${word}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="sign-form">Save</Button>
+          <Button type="submit" form="sign-form" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
         </>
       }
     >
       <form id="sign-form" className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => (e.preventDefault(), void save())}>
         {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>}
         <p className="text-sm text-muted sm:col-span-2">
-          {d.kind === "questionnaire" ? "Who answered it, and when." : `Record who ${word} it for ${d.party?.name || "the client"}. Keep the signed copy in the project's Assets.`}
+          {d.kind === "questionnaire" ? "Who answered it, and when." : `Record who ${word} it for ${d.party?.name || "the client"}, and attach the signed copy they sent back.`}
         </p>
         <div>
           <label htmlFor="sg-name" className={labelClasses}>Name</label>
@@ -177,6 +261,18 @@ function SignDialog({ d, onClose }: { d: SalesDoc; onClose: () => void }) {
         <div>
           <label htmlFor="sg-date" className={labelClasses}>Date</label>
           <input id="sg-date" type="date" required className={inputClasses} value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="sg-file" className={labelClasses}>Signed copy (PDF, scan or photo, up to 20 MB)</label>
+          <input
+            id="sg-file"
+            type="file"
+            multiple
+            accept="application/pdf,image/*"
+            className="block w-full text-sm text-body file:mr-3 file:rounded-lg file:border file:border-line file:bg-tint file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground"
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+          />
+          <p className="mt-1 text-xs text-subtle">On a phone you can take a photo of the signed pages. Several files are fine.</p>
         </div>
       </form>
     </Modal>
@@ -202,6 +298,9 @@ function DocEditor({ d, onDone, onDelete }: { d: SalesDoc; onDone: () => void; o
   const [amcPercent, setAmcPercent] = useState(d.amcPercent === undefined || d.amcPercent === null ? "" : String(d.amcPercent));
   const [totalPrice, setTotalPrice] = useState(d.totalPrice === undefined || d.totalPrice === null ? "" : String(d.totalPrice));
   const [showItems, setShowItems] = useState(d.showItems !== false);
+  const [pricing, setPricing] = useState<"hourly" | "fixed">(d.pricing ?? "fixed");
+  const [costBlocks, setCostBlocks] = useState<CostBlock[]>(d.costBlocks?.length ? d.costBlocks : DEFAULT_COST_BLOCKS);
+  const [showPayMethods, setShowPayMethods] = useState(d.showPaymentMethods !== false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +331,16 @@ function DocEditor({ d, onDone, onDelete }: { d: SalesDoc; onDone: () => void; o
           facts: facts.filter((f) => f.label.trim()),
           milestones: milestones.filter((m) => m.label.trim() || Number(m.percent)).map((m) => ({ label: m.label.trim(), percent: Number(m.percent) || 0 })),
           amcPercent: amcPercent === "" ? null : Number(amcPercent),
+          pricing,
+          showPaymentMethods: showPayMethods,
+          costBlocks: costBlocks.map((b) => ({
+            ...b,
+            title: b.title.trim(),
+            summary: b.summary.trim(),
+            rate: Number(b.rate) || 0,
+            rows: b.rows.filter((r) => r.task.trim() || Number(r.hours)).map((r) => (r.heading ? { task: r.task.trim(), heading: true } : { task: r.task.trim(), hours: Number(r.hours) || 0, rate: r.rate === undefined || r.rate === null ? null : Number(r.rate) })),
+            milestones: (b.milestones ?? []).filter((m) => m.label.trim() || Number(m.percent)).map((m) => ({ label: m.label.trim(), percent: Number(m.percent) || 0 })),
+          })),
         });
       }
       if (d.kind === "proposal" && deal) {
@@ -341,39 +450,6 @@ function DocEditor({ d, onDone, onDelete }: { d: SalesDoc; onDone: () => void; o
               <input id="dc-valid" type="date" className={inputClasses} value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
             <div className="sm:col-span-2">
-              <label htmlFor="dc-est" className={labelClasses}>Price from estimate</label>
-              <select
-                id="dc-est"
-                className={inputClasses}
-                value={estimateId}
-                onChange={(e) => {
-                  setEstimateId(e.target.value);
-                  const est = estimates.data.find((x) => x.id === e.target.value);
-                  if (est) {
-                    const once = groupedTotals(est.items as LineItem[] | undefined, discountsOf(est)).find((g) => g.key === "once");
-                    if (once) setTotalPrice(String(once.total));
-                  }
-                }}
-              >
-                <option value="">None</option>
-                {d.estimateId && !estimates.data.some((e) => e.id === d.estimateId) && <option value={d.estimateId}>{d.estimateNumber ?? "Saved estimate"}</option>}
-                {estimates.data.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {[e.estimateNumber, e.title].filter(Boolean).map(String).join(" · ")}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-subtle">Copies the estimate&apos;s lines and fills the total from its one-time charges. Pick it again after changing the estimate to refresh them.</p>
-            </div>
-            <div>
-              <label htmlFor="dc-total" className={labelClasses}>Total project cost (₹)</label>
-              <input id="dc-total" type="number" min={0} className={inputClasses} value={totalPrice} onChange={(e) => setTotalPrice(e.target.value)} placeholder="From the estimate" />
-            </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-body">
-              <input type="checkbox" className="size-4 accent-brand-600" checked={showItems} onChange={(e) => setShowItems(e.target.checked)} />
-              Show the estimate&apos;s line items too
-            </label>
-            <div className="sm:col-span-2">
               <label htmlFor="dc-revnote" className={labelClasses}>Revision note</label>
               <input id="dc-revnote" className={inputClasses} value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)} placeholder="e.g. replaces initial estimate" />
             </div>
@@ -399,30 +475,84 @@ function DocEditor({ d, onDone, onDelete }: { d: SalesDoc; onDone: () => void; o
               <Button variant="secondary" size="sm" className="mt-2" onClick={() => setFacts((all) => [...all, { label: "", value: "" }])}><Plus className="size-4" /> Add detail</Button>
             </div>
             <div className="sm:col-span-2">
-              <p className={labelClasses}>Payment milestones</p>
-              <div className="space-y-2">
-                {milestones.map((m, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input className={inputClasses} value={m.label} onChange={(e) => setMilestones((all) => all.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} placeholder="Milestone" aria-label={`Milestone ${i + 1}`} />
-                    <div className="relative w-24 shrink-0">
-                      <input type="number" min={0} max={100} className={cn(inputClasses, "pr-6")} value={m.percent} onChange={(e) => setMilestones((all) => all.map((x, j) => (j === i ? { ...x, percent: Number(e.target.value) } : x)))} aria-label={`Milestone ${i + 1} percent`} />
-                      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-sm text-subtle">%</span>
-                    </div>
-                    <button type="button" onClick={() => setMilestones((all) => all.filter((_, j) => j !== i))} className="rounded p-1 text-subtle hover:text-red-600" aria-label="Remove milestone"><Trash2 className="size-4" /></button>
-                  </div>
+              <p className={labelClasses}>Pricing</p>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Pricing">
+                {(
+                  [
+                    ["hourly", "Hourly breakdown", "Hours per task × rate"],
+                    ["fixed", "Fixed price", "A total, or the lead's estimate"],
+                  ] as const
+                ).map(([v, label, hint]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={pricing === v}
+                    onClick={() => setPricing(v)}
+                    className={cn("rounded-xl border px-3 py-2 text-left text-sm", pricing === v ? "border-brand-500 bg-accent-soft" : "border-line hover:border-line-strong")}
+                  >
+                    <span className={cn("block font-medium", pricing === v ? "text-accent" : "text-foreground")}>{label}</span>
+                    <span className="block text-xs text-muted">{hint}</span>
+                  </button>
                 ))}
               </div>
-              <div className="mt-2 flex items-center gap-3">
-                <Button variant="secondary" size="sm" onClick={() => setMilestones((all) => [...all, { label: "", percent: 0 }])}><Plus className="size-4" /> Add milestone</Button>
-                {(() => {
-                  const sum = milestones.reduce((t, m) => t + (Number(m.percent) || 0), 0);
-                  return <span className={cn("text-xs", sum === 100 ? "text-subtle" : "text-amber-600")}>Total {sum}%{sum === 100 ? "" : " (should be 100%)"}</span>;
-                })()}
-              </div>
-              <p className="mt-1 text-xs text-subtle">The table with each amount appears under the Payment terms section; the total box under Project investment.</p>
             </div>
+            {pricing === "hourly" ? (
+              <div className="sm:col-span-2">
+                <CostBlocksEditor value={costBlocks} onChange={setCostBlocks} />
+                <p className="mt-2 text-xs text-subtle">The task tables, summary and total go where the Project investment section has [price]; the milestone table goes under Payment terms.</p>
+              </div>
+            ) : (
+              <>
+                {deal && (
+                  <>
+                    <div className="sm:col-span-2">
+                      <label htmlFor="dc-est" className={labelClasses}>Price from estimate</label>
+                      <select
+                        id="dc-est"
+                        className={inputClasses}
+                        value={estimateId}
+                        onChange={(e) => {
+                          setEstimateId(e.target.value);
+                          const est = estimates.data.find((x) => x.id === e.target.value);
+                          if (est) {
+                            const once = groupedTotals(est.items as LineItem[] | undefined, discountsOf(est)).find((g) => g.key === "once");
+                            if (once) setTotalPrice(String(once.total));
+                          }
+                        }}
+                      >
+                        <option value="">None</option>
+                        {d.estimateId && !estimates.data.some((e) => e.id === d.estimateId) && <option value={d.estimateId}>{d.estimateNumber ?? "Saved estimate"}</option>}
+                        {estimates.data.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {[e.estimateNumber, e.title].filter(Boolean).map(String).join(" · ")}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-subtle">Copies the estimate&apos;s lines and fills the total from its one-time charges. Pick it again after changing the estimate to refresh them.</p>
+                    </div>
+                    <div>
+                      <label htmlFor="dc-total" className={labelClasses}>Total project cost (₹)</label>
+                      <input id="dc-total" type="number" min={0} className={inputClasses} value={totalPrice} onChange={(e) => setTotalPrice(e.target.value)} placeholder="From the estimate" />
+                    </div>
+                    <label className="flex items-center gap-2 self-end pb-2 text-sm text-body">
+                      <input type="checkbox" className="size-4 accent-brand-600" checked={showItems} onChange={(e) => setShowItems(e.target.checked)} />
+                      Show the estimate&apos;s line items too
+                    </label>
+                  </>
+                )}
+                <div className="sm:col-span-2">
+                  <p className={labelClasses}>Payment milestones</p>
+                  <MilestonesEditor value={milestones} onChange={setMilestones} />
+                </div>
+              </>
+            )}
+            <label className="flex items-center gap-2 text-sm text-body sm:col-span-2">
+              <input type="checkbox" className="size-4 accent-brand-600" checked={showPayMethods} onChange={(e) => setShowPayMethods(e.target.checked)} />
+              Show payment methods (bank and UPI details from Settings, with a UPI QR code) under Payment terms
+            </label>
             <div>
-              <label htmlFor="dc-amc" className={labelClasses}>AMC from the second year (% of total)</label>
+              <label htmlFor="dc-amc" className={labelClasses}>AMC from the second year (% of development cost)</label>
               <input id="dc-amc" type="number" min={0} max={100} className={inputClasses} value={amcPercent} onChange={(e) => setAmcPercent(e.target.value)} />
             </div>
           </>
@@ -454,7 +584,7 @@ function DocEditor({ d, onDone, onDelete }: { d: SalesDoc; onDone: () => void; o
         <p className={labelClasses}>{questions ? "Questions and answers" : "Sections"}</p>
         <p className="mb-3 text-xs text-subtle">
           Start a line with &quot;- &quot; for a bullet or &quot;1. &quot; for a numbered step; leave a blank line between paragraphs.
-          {d.kind === "proposal" ? " \"## \" starts a sub-heading (3.1, 3.2…), \"| a | b |\" lines make a table, \"> \" makes a note, **text** is bold. {total}, {amcAmount}, {amcPercent} and {validDays} are worked out for you." : ""}
+          {d.kind === "proposal" ? " \"## \" starts a sub-heading (3.1, 3.2…), \"| a | b |\" lines make a table, \"> \" makes a note, **text** is bold. {total}, {rate}, {amcAmount}, {amcBase}, {amcPercent} and {validDays} are worked out for you; a line with [price] places the price tables." : ""}
           {d.template ? " Placeholders like {client}, {project}, {date}, {company} and {companyAddress} are filled in for each new document." : ""}
         </p>
         <ol className="space-y-3">

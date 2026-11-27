@@ -118,6 +118,9 @@ function ProjectDetail({ id }: { id: string }) {
         <DealDocuments
           kinds={["proposal", "agreement", "nda", "questionnaire"]}
           ctx={{
+            // The client's lead too, so the same documents show on the lead, client and project pages.
+            leadId: (client?.fromLeadId as string | undefined) ?? null,
+            leadIdLabel: (client?.contactPerson as string | undefined) ?? null,
             projectId: id,
             projectIdLabel: String(project.name ?? ""),
             clientId: (project.clientId as string | undefined) ?? null,

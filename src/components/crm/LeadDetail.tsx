@@ -151,7 +151,7 @@ function LeadDetail({ id }: { id: string }) {
       {message && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">{message}</p>}
       {Boolean(lead.clientId) && (
         <p className="mb-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">
-          Converted to client <Link href="/crm/clients" className="font-medium underline">{String(lead.clientIdLabel ?? "")}</Link>.
+          Converted to client <Link href={`/crm/clients/view?id=${String(lead.clientId)}`} className="font-medium underline">{String(lead.clientIdLabel ?? "")}</Link>.
         </p>
       )}
       <BasicDetails lead={lead} role={profile.role} />

@@ -16,6 +16,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@types/qrcode": "^1.5.5",
     "firebase": "^13.2.0",
     "jose": "^6.2.18",
     "jspdf": "^4.2.1",
@@ -23,6 +24,7 @@
     "next": "16.4.6",
     "nodemailer": "^10.6.1",
     "pdfjs-dist": "^4.10.38",
+    "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

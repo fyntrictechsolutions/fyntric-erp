@@ -46,9 +46,10 @@ export function DealDocuments({ ctx, services = [], intro = false, kinds = DEAL_
 
   const docs = useMemo(() => {
     const all = new Map<string, SalesDoc>();
-    for (const d of [...byLead.data, ...byClient.data, ...byProject.data]) all.set(d.id, d);
+    // On a project page, documents of the client's other projects are left out.
+    for (const d of [...byLead.data, ...byClient.data, ...byProject.data]) if (!ctx.projectId || !d.projectId || d.projectId === ctx.projectId) all.set(d.id, d);
     return [...all.values()].sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
-  }, [byLead.data, byClient.data, byProject.data]);
+  }, [byLead.data, byClient.data, byProject.data, ctx.projectId]);
 
   if (!allowed) return null;
 
