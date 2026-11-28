@@ -48,6 +48,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [kind, setKind] = useState("");
   const [editor, setEditor] = useState<{ record: BaseRecord | null; preset?: Record<string, unknown> } | null>(null);
 
   // "?new=1&field=value" opens a new record with those values (e.g. Raise invoice from a recurring charge).
@@ -67,6 +68,11 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
 
   const statusField = module.fields.find((f) => f.name === module.statusField);
   const statusOptions = statusField ? optionsFor(statusField, settings) : [];
+  // A second row of filters (e.g. employment type). Records without a value count as the field's default.
+  const kindField = module.fields.find((f) => f.name === module.secondFilterField);
+  const kindOptions = kindField ? optionsFor(kindField, settings) : [];
+  const kindOf = (r: BaseRecord) => kindValue(kindField, r);
+  const inStatus = status ? data.filter((r) => r[module.statusField!] === status) : data;
   const columns = module.columns
     .map((c): Column | null => {
       const group = typeof c === "string" ? { label: "", fields: [c] } : c;
@@ -80,10 +86,11 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
     const term = search.trim().toLowerCase();
     return data.filter((r) => {
       if (status && r[module.statusField!] !== status) return false;
+      if (kind && kindValue(module.fields.find((f) => f.name === module.secondFilterField), r) !== kind) return false;
       if (!term) return true;
       return module.searchFields.some((f) => String(r[f] ?? "").toLowerCase().includes(term));
     });
-  }, [data, search, status, module.searchFields, module.statusField]);
+  }, [data, search, status, kind, module.fields, module.secondFilterField, module.searchFields, module.statusField]);
 
   const close = useCallback(() => setEditor(null), []);
   const openCreate = () => setEditor({ record: null });
@@ -152,6 +159,7 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
               aria-label={`Search ${module.title}`}
             />
           </div>
+          <div className="flex min-w-0 flex-col gap-2">
           {statusOptions.length > 0 && (
             <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0">
               <FilterChip active={!status} onClick={() => setStatus("")} label="All" count={data.length} />
@@ -166,6 +174,15 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
               ))}
             </div>
           )}
+          {kindOptions.length > 0 && (
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:pb-0" role="group" aria-label={kindField!.label}>
+              <FilterChip active={!kind} onClick={() => setKind("")} label="All types" count={inStatus.length} />
+              {kindOptions.map((o) => (
+                <FilterChip key={o.value} active={kind === o.value} onClick={() => setKind(o.value)} label={o.label} count={inStatus.filter((r) => kindOf(r) === o.value).length} />
+              ))}
+            </div>
+          )}
+          </div>
         </div>
 
         {loading ? (
@@ -249,6 +266,11 @@ export function ResourcePage({ module, intro, title }: ResourcePageProps) {
       {editor && <RecordEditor module={module} record={editor.record} preset={editor.preset} onClose={close} />}
     </div>
   );
+}
+
+function kindValue(field: FieldDefinition | undefined, r: BaseRecord) {
+  if (!field) return "";
+  return r[field.name] ?? (typeof field.defaultValue === "string" ? field.defaultValue : "");
 }
 
 function FilterChip({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count: number }) {

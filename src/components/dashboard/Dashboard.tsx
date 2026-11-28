@@ -44,6 +44,8 @@ export function Dashboard() {
   const leave = useModuleRecords("leave", profile, !reviewsLeave);
   const leads = useModuleRecords("leads", profile);
   const projects = useModuleRecords("projects", profile);
+  // Other Staff only get the projects whose team they're in.
+  const teamOnly = permissionFor(profile.role, "projects").read === "team";
   const timesheets = useModuleRecords("timesheets", profile);
   const invoices = useModuleRecords("invoices", profile);
   const expenses = useModuleRecords("expenses", profile);
@@ -83,7 +85,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {projects.allowed && (
-          <StatCard label="Active projects" value={String(stats.activeProjects.length)} hint={`${projects.data.length} in total`} icon={FolderKanban} href="/projects" loading={projects.loading} />
+          <StatCard label={teamOnly ? "Your active projects" : "Active projects"} value={String(stats.activeProjects.length)} hint={`${projects.data.length} in total`} icon={FolderKanban} href="/projects" loading={projects.loading} />
         )}
         {leads.allowed && (
           <StatCard label="Open leads" value={String(stats.openLeads.length)} hint={`${formatCurrency(sum(stats.openLeads, "estimatedValue"), true)} in pipeline`} icon={Target} accent="violet" href="/crm/leads" loading={leads.loading} />
@@ -121,15 +123,17 @@ export function Dashboard() {
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-5">
         {projects.allowed && (
           <Card className="xl:col-span-3">
-            <SectionTitle title="Projects in progress" href="/projects" />
+            <SectionTitle title={teamOnly ? "Your projects" : "Projects in progress"} href="/projects" />
             {stats.activeProjects.length === 0 ? (
-              <p className="px-5 pb-6 text-sm text-muted">No active projects right now.</p>
+              <p className="px-5 pb-6 text-sm text-muted">{teamOnly ? "You're not on any active project's team yet." : "No active projects right now."}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {stats.activeProjects.slice(0, 6).map((p) => (
                   <li key={p.id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-5 py-3 sm:grid-cols-[1fr_10rem_auto]">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">{String(p.name)}</p>
+                      <Link href={`/projects/view?id=${p.id}`} className="block truncate font-medium text-foreground hover:text-accent">
+                        {String(p.name)}
+                      </Link>
                       <p className="truncate text-xs text-muted">{String(p.clientIdLabel ?? "Internal")} · due {formatDate(p.dueDate)}</p>
                     </div>
                     <div className="order-last col-span-2 sm:order-none sm:col-span-1">

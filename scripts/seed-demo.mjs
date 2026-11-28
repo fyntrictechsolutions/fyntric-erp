@@ -63,7 +63,7 @@ const employees = [
 ];
 for (const [i, [fullName, employeeCode, department, designation, status]] of employees.entries()) {
   const account = ACCOUNT_OF[`emp${i}`];
-  await db.doc(`employees/emp${i}`).set(stamp("admin", { employeeId: null, fullName, employeeCode, department, designation, status, employmentType: "full_time", joiningDate: iso(-400 + i * 40), email: `${fullName.split(" ")[0].toLowerCase()}@fyntrictech.co.in`, accountId: account ? uid[account] : null, accountEmail: account ? PEOPLE.find((p) => p[0] === account)[2] : null }));
+  await db.doc(`employees/emp${i}`).set(stamp("admin", { employeeId: null, fullName, employeeCode, department, designation, status, employmentType: ["full_time", "full_time", "full_time", "full_time", "intern", "part_time"][i], phone: `+91 98470 1${String(i).padStart(4, "0")}`, joiningDate: iso(-400 + i * 40), email: `${fullName.split(" ")[0].toLowerCase()}@fyntrictech.co.in`, accountId: account ? uid[account] : null, accountEmail: account ? PEOPLE.find((p) => p[0] === account)[2] : null }));
 }
 
 const clients = [
@@ -127,6 +127,13 @@ for (const [i, [leadId, leadIdLabel, title, items, status, day]] of estimates.en
   await db.doc(`estimates/est${i}`).set(stamp("sales", { estimateNumber: `EST-202611-${3001 + i}`, leadId, leadIdLabel, title, items, status, issueDate: iso(day), validUntil: iso(day + 15), subtotal, taxTotal, total: subtotal + taxTotal, terms: "50% advance to start the work, balance on delivery." }));
 }
 
+// Other Staff only see the projects whose team they're in: Arjun (emp3) is on the first two.
+const TEAMS = [
+  { teamIds: ["emp3", "emp4"], teamIdsLabel: ["Arjun Das", "Fathima Rasheed"] },
+  { teamIds: ["emp3", "emp5"], teamIdsLabel: ["Arjun Das", "Kiran Thomas"] },
+  { teamIds: ["emp4"], teamIdsLabel: ["Fathima Rasheed"] },
+  { teamIds: ["emp5"], teamIdsLabel: ["Kiran Thomas"] },
+];
 const projects = [
   ["Acme e-commerce revamp", "acme", "Acme Retail Pvt Ltd", 65, "in_progress", "high", 800000, 30],
   ["GreenLeaf delivery app", "greenleaf", "GreenLeaf Organics", 35, "in_progress", "medium", 600000, 60],
@@ -134,7 +141,7 @@ const projects = [
   ["Acme loyalty programme", "acme", "Acme Retail Pvt Ltd", 100, "completed", "low", 250000, -20],
 ];
 for (const [i, [name, clientId, clientIdLabel, progress, status, priority, budget, due]] of projects.entries()) {
-  await db.doc(`projects/proj${i}`).set(stamp("project_manager", { name, code: `FT-P-00${i + 1}`, clientId, clientIdLabel, managerId: "emp0", managerIdLabel: "Anjali Menon", progress, status, priority, budget, startDate: iso(-60), dueDate: iso(due) }));
+  await db.doc(`projects/proj${i}`).set(stamp("project_manager", { name, code: `FT-P-00${i + 1}`, clientId, clientIdLabel, managerId: uid.project_manager, managerIdLabel: "Anjali Menon", ...TEAMS[i], progress, status, priority, budget, startDate: iso(-60), dueDate: iso(due) }));
 }
 
 const invoices = [

@@ -56,6 +56,16 @@ service cloud.firestore {
     }
 
     // A client user reading records linked to their company.
+    // Other Staff see a project only when they're on its team (teamIds holds employee ids).
+    function onTeam(data) {
+      return me().get('employeeId', null) != null && me().get('employeeId', '') in data.get('teamIds', []);
+    }
+
+    // Internal roles that aren't limited to their own projects.
+    function seesAllProjects() {
+      return hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'investor', 'viewer']);
+    }
+
     function isMyClientRecord() {
       return role() == 'client' && me().clientId != null && resource.data.clientId == me().clientId;
     }
@@ -64,6 +74,8 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || role() == 'admin');
+      // Project managers pick a project's manager from the admins and project managers.
+      allow list: if hasRole(['project_manager']) && resource.data.role in ['admin', 'project_manager'];
       // First sign-in registers the user as "pending" until an admin assigns a role...
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'pending'
@@ -256,7 +268,7 @@ service cloud.firestore {
     // Galleries: one collection for every gallery, told apart by `gallery` ("sales" for now).
     // The files themselves are on Cloudinary; this is their list, names and product links.
     match /gallery/{id} {
-      allow read: if resource.data.gallery == 'sales' && (internal() || hasRole(['investor', 'viewer']));
+      allow read: if resource.data.gallery == 'sales' && hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'investor', 'viewer']);
       allow create: if request.resource.data.gallery == 'sales' && hasRole(['admin', 'sales']) && createsOwn();
       allow update: if resource.data.gallery == 'sales' && request.resource.data.gallery == 'sales'
         && hasRole(['admin', 'sales']) && keepsOwner();
@@ -281,7 +293,8 @@ service cloud.firestore {
     }
 
     match /products/{id} {
-      allow read: if internal() || hasRole(['investor', 'viewer']);
+      // Other Staff (engineering) don't see selling prices.
+      allow read: if hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'investor', 'viewer']);
       allow create: if hasRole(['admin', 'sales']) && createsOwn();
       allow update: if hasRole(['admin', 'sales']) && keepsOwner();
       allow delete: if hasRole(['admin', 'sales']);
@@ -290,15 +303,19 @@ service cloud.firestore {
     // Delivery
 
     match /projects/{id} {
-      allow read: if internal() || hasRole(['investor', 'viewer']) || isMyClientRecord();
+      allow read: if seesAllProjects() || (role() == 'staff' && onTeam(resource.data)) || isMyClientRecord();
       allow create: if hasRole(['admin', 'project_manager']) && createsOwn();
-      allow update: if hasRole(['admin', 'project_manager']) && keepsOwner();
+      allow update: if (hasRole(['admin', 'project_manager']) && keepsOwner())
+        // Progress follows the task board, so a team member's board change can save it.
+        || (role() == 'staff' && onTeam(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['progress', 'updatedAt']));
       allow delete: if hasRole(['admin', 'project_manager']);
 
       // The project's task board, files and notes, and delivery checklist. The whole team (and
       // investors and viewers) can look; admins and project managers run them. Clients don't see them.
       match /{list}/{itemId} {
-        allow read: if list in ['tasks', 'assets', 'checklist'] && (internal() || hasRole(['investor', 'viewer']));
+        allow read: if list in ['tasks', 'assets', 'checklist'] && (seesAllProjects()
+          || (role() == 'staff' && onTeam(get(/databases/$(database)/documents/projects/$(id)).data)));
         allow create: if list in ['tasks', 'assets', 'checklist'] && hasRole(['admin', 'project_manager']) && createsOwn();
         allow update: if list in ['tasks', 'assets', 'checklist'] && (
           (hasRole(['admin', 'project_manager']) && keepsOwner())

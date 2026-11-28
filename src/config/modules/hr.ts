@@ -13,8 +13,9 @@ export const employeesModule: ModuleDefinition = {
   noManualCreate: true,
   detailHref: (id) => `/hr/employees/view?id=${id}`,
   statusField: "status",
+  secondFilterField: "employmentType",
   searchFields: ["fullName", "employeeCode", "email", "designation", "department"],
-  columns: ["fullName", "employeeCode", "department", "designation", "joiningDate", "status"],
+  columns: [{ label: "Employee", fields: ["fullName", "phone", "email"] }, "employeeCode", "department", "designation", "employmentType", "joiningDate", "status"],
   fields: [
     { name: "fullName", label: "Full name", type: "text", required: true },
     { name: "employeeCode", label: "Employee ID", type: "text", placeholder: "FT-001" },

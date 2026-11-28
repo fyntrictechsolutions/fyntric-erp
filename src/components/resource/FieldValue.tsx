@@ -25,6 +25,10 @@ export function FieldValue({ field, record }: { field: FieldDefinition; record: 
       return value ? <Check className="size-4 text-emerald-600" aria-label="Yes" /> : empty;
     case "items":
       return Array.isArray(value) && value.length ? <>{value.length} item{value.length === 1 ? "" : "s"}</> : empty;
+    case "references": {
+      const names = asList(record[`${field.name}Label`]);
+      return names.length ? <>{names.join(", ")}</> : empty;
+    }
     case "reference":
       return record[`${field.name}Label`] ? <>{String(record[`${field.name}Label`])}</> : empty;
     case "currency":

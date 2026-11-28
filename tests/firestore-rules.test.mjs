@@ -328,20 +328,21 @@ describe("module access by role", () => {
     assert.equal(await allowed(getDocs(collection(users.investor.db, "estimates"))), true);
     assert.equal(await allowed(getDocs(collection(users.staff.db, "estimates"))), false);
   });
-  test("products: everyone internal reads, sales writes", async () => {
-    assert.equal(await allowed(getDocs(collection(users.staff.db, "products"))), true);
+  test("products: internal reads except Other Staff, sales writes", async () => {
+    assert.equal(await allowed(getDocs(collection(users.project_manager.db, "products"))), true);
+    assert.equal(await allowed(getDocs(collection(users.staff.db, "products"))), false);
     assert.equal(await allowed(addDoc(collection(users.sales.db, "products"), { name: "Site", userId: users.sales.uid })), true);
     assert.equal(await allowed(addDoc(collection(users.staff.db, "products"), { name: "Site", userId: users.staff.uid })), false);
     assert.equal(await allowed(getDocs(collection(users.client.db, "products"))), false);
   });
-  test("sales gallery: internal, investor and viewer read; sales and admin add, edit and delete", async () => {
+  test("sales gallery: internal (not Other Staff), investor and viewer read; sales and admin add, edit and delete", async () => {
     const entry = (role) => ({ gallery: "sales", name: "Brochure", visibility: "public", userId: users[role].uid });
     const salesQuery = (role) => query(collection(users[role].db, "gallery"), where("gallery", "==", "sales"));
     assert.equal(await allowed(addDoc(collection(users.sales.db, "gallery"), entry("sales"))), true);
     assert.equal(await allowed(addDoc(collection(users.staff.db, "gallery"), entry("staff"))), false);
     assert.equal(await allowed(addDoc(collection(users.sales.db, "gallery"), { ...entry("sales"), gallery: "hr" })), false);
-    for (const role of ["staff", "investor", "viewer", "project_manager"]) assert.equal(await allowed(getDocs(salesQuery(role))), true, role);
-    assert.equal(await allowed(getDocs(salesQuery("client"))), false);
+    for (const role of ["investor", "viewer", "project_manager"]) assert.equal(await allowed(getDocs(salesQuery(role))), true, role);
+    for (const role of ["staff", "client"]) assert.equal(await allowed(getDocs(salesQuery(role))), false, role);
     // Lists must ask for one gallery.
     assert.equal(await allowed(getDocs(collection(users.staff.db, "gallery"))), false);
     const ref = await addDoc(collection(users.sales.db, "gallery"), entry("sales"));
@@ -351,13 +352,14 @@ describe("module access by role", () => {
     assert.equal(await allowed(deleteDoc(doc(users.viewer.db, "gallery", ref.id))), false);
     assert.equal(await allowed(deleteDoc(doc(users.sales.db, "gallery", ref.id))), true);
   });
-  test("sales gallery files in Storage: sales and admin upload and delete; staff, investor and viewer read; clients nothing", async () => {
+  test("sales gallery files in Storage: sales and admin upload and delete; investor and viewer read; staff and clients nothing", async () => {
     const file = (role, path = "gallery/sales/f1/brochure.pdf") => ref(users[role].storage, path);
     const pdf = new Uint8Array([37, 80, 68, 70]);
     assert.equal(await allowed(uploadBytes(file("sales"), pdf, { contentType: "application/pdf" })), true);
     assert.equal(await allowed(uploadBytes(file("staff", "gallery/sales/f2/x.pdf"), pdf, { contentType: "application/pdf" })), false);
     assert.equal(await allowed(uploadBytes(file("admin", "elsewhere/x.pdf"), pdf, { contentType: "application/pdf" })), false);
-    for (const role of ["staff", "investor", "viewer", "project_manager"]) assert.equal(await allowed(getBytes(file(role))), true, role);
+    for (const role of ["investor", "viewer", "project_manager"]) assert.equal(await allowed(getBytes(file(role))), true, role);
+    assert.equal(await allowed(getBytes(file("staff"))), false);
     assert.equal(await allowed(getBytes(file("client"))), false);
     assert.equal(await allowed(getBytes(file("pending"))), false);
     // Too large for a PDF (over 25 MB).
@@ -384,12 +386,32 @@ describe("module access by role", () => {
     assert.equal(await allowed(setDoc(doc(users.hr_manager.db, "settings", "business"), { name: "X" }, { merge: true })), false);
     assert.equal(await allowed(getDoc(doc(users.pending.db, "settings", "business"))), false);
   });
-  test("projects: PM writes, staff/investor/viewer read only", async () => {
+  test("projects: PM writes, investor/viewer read only", async () => {
     assert.equal(await allowed(updateDoc(doc(users.project_manager.db, "projects", "p1"), { progress: 50 })), true);
-    for (const r of ["staff", "investor", "viewer"]) {
+    for (const r of ["investor", "viewer"]) {
       assert.equal(await allowed(getDocs(collection(users[r].db, "projects"))), true, r);
       assert.equal(await allowed(updateDoc(doc(users[r].db, "projects", "p1"), { progress: 60 })), false, r);
     }
+  });
+  test("projects: Other Staff see only their team's projects and can save progress there", async () => {
+    const staff = users.staff;
+    await admin.doc(`users/${staff.uid}`).update({ employeeId: "empS" });
+    await admin.doc("projects/p1").update({ teamIds: ["empS", "emp9"] });
+    assert.equal(await allowed(getDocs(query(collection(staff.db, "projects"), where("teamIds", "array-contains", "empS")))), true);
+    assert.equal(await allowed(getDocs(collection(staff.db, "projects"))), false);
+    assert.equal(await allowed(getDoc(doc(staff.db, "projects", "p1"))), true);
+    assert.equal(await allowed(getDoc(doc(staff.db, "projects", "p2"))), false);
+    assert.equal(await allowed(getDocs(collection(staff.db, "projects/p1/tasks"))), true);
+    assert.equal(await allowed(getDocs(collection(staff.db, "projects/p2/tasks"))), false);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects", "p1"), { progress: 40, updatedAt: 1 })), true);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects", "p1"), { name: "Mine" })), false);
+    assert.equal(await allowed(updateDoc(doc(staff.db, "projects", "p2"), { progress: 40 })), false);
+  });
+  test("project managers list only admin and PM accounts", async () => {
+    const pm = users.project_manager;
+    assert.equal(await allowed(getDocs(query(collection(pm.db, "users"), where("role", "in", ["admin", "project_manager"])))), true);
+    assert.equal(await allowed(getDocs(collection(pm.db, "users"))), false);
+    assert.equal(await allowed(getDocs(query(collection(users.staff.db, "users"), where("role", "in", ["admin", "project_manager"])))), false);
   });
   test("invoices: sales edits but can't delete; investor reads; staff nothing", async () => {
     assert.equal(await allowed(updateDoc(doc(users.sales.db, "invoices", "i1"), { status: "paid" })), true);
@@ -412,6 +434,7 @@ describe("module access by role", () => {
   test("project task board, assets and checklist: PM runs them, assignees move their own tasks, clients see nothing", async () => {
     const pm = users.project_manager, staff = users.staff;
     await admin.doc(`users/${staff.uid}`).update({ employeeId: "empS" });
+    await admin.doc("projects/p1").update({ teamIds: ["empS"] });
     const t = (u, extra = {}) => ({ title: "Design", status: "todo", order: 0, assigneeId: "empS", assigneeName: "S", userId: u.uid, createdBy: u.uid, createdAt: 1, ...extra });
     assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/tasks/t1"), t(pm))), true);
     assert.equal(await allowed(setDoc(doc(pm.db, "projects/p1/tasks/t2"), t(pm, { assigneeId: "other" }))), true);

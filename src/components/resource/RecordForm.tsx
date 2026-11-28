@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { asList } from "@/lib/format";
 import type { BaseRecord } from "@/types";
 import { LineItemsEditor } from "./LineItemsEditor";
-import { ReferenceSelect } from "./ReferenceSelect";
+import { ReferenceChips, ReferenceSelect } from "./ReferenceSelect";
 
 type Values = Record<string, unknown>;
 
@@ -24,7 +24,7 @@ export function optionsFor(field: FieldDefinition, settings: Settings): SelectOp
 export function initialValues(module: ModuleDefinition, ctx: FormContext, record?: BaseRecord | null, preset?: Values): Values {
   if (record) {
     const values: Values = module.toForm ? module.toForm(record) : { ...record };
-    for (const f of module.fields) if (f.type === "multiselect") values[f.name] = asList(record[f.name]);
+    for (const f of module.fields) if (f.type === "multiselect" || f.type === "references") values[f.name] = asList(record[f.name]);
     return values;
   }
   const values: Values = {};
@@ -51,6 +51,9 @@ export function toStoredValues(module: ModuleDefinition, values: Values, ctx: Fo
       out[f.name] = Boolean(v);
     } else if (f.type === "multiselect") {
       out[f.name] = asList(v);
+    } else if (f.type === "references") {
+      out[f.name] = asList(v);
+      out[`${f.name}Label`] = asList(out[`${f.name}Label`]);
     } else if (v === "") {
       out[f.name] = null;
     }
@@ -246,6 +249,17 @@ function FieldInput({
               note(field.name, "Couldn't fill the form from this record. Fill it in by hand.", "error");
             }
           }}
+        />
+      );
+    case "references":
+      return (
+        <ReferenceChips
+          id={id}
+          field={field}
+          value={asList(raw)}
+          labels={asList(values[`${field.name}Label`])}
+          disabled={disabled}
+          onChange={(ids, labels) => set({ [field.name]: ids, [`${field.name}Label`]: labels })}
         />
       );
     case "items":

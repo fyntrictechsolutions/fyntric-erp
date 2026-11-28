@@ -26,9 +26,9 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 | Leads and follow-ups | Full | View | – | Full | – | – | – | View |
 | Estimates | Full | View | – | Full | – | – | View | View |
 | Clients | Full | View | – | Full | – | – | View | View |
-| Products & services | Full | View | View | Full | View | – | View | View |
-| Sales gallery | Full | View | View | Full | View | – | View | View |
-| Projects | Full | Full | View | View | View | Linked | View | View |
+| Products & services | Full | View | View | Full | – | – | View | View |
+| Sales gallery | Full | View | View | Full | – | – | View | View |
+| Projects | Full | Full | View | View | Their team's | Linked | View | View |
 | Timesheets | Full | Full | Own | Own | Own | – | – | – |
 | Suppliers, purchase bills | Full | – | – | – | – | – | View | View |
 | Invoices | Full | View | – | Add & edit (no delete) | – | Linked | View | View |
@@ -53,6 +53,9 @@ Legend: **Full** = view, add, edit, delete all records · **View** = read-only, 
 - Every record stores who created it (`userId`) and whose employee record it belongs to (`employeeId`), and neither can be changed afterwards.
 - Disabling a user (Users & roles > Account active) cuts off their access immediately.
 - Project budgets are hidden from Clients and Other Staff in the app.
+- Other Staff see a project (and its task board, assets and checklist) only when they're in its **Team**. They can save its progress, which follows the task board.
+- Other Staff have no Sales section: no prices, products or gallery.
+- Project managers can list admin and project manager accounts, to pick a project's manager.
 
 ## Changing a permission
 
