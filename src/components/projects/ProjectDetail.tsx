@@ -2,7 +2,7 @@
 
 import { collection } from "firebase/firestore";
 import { CheckSquare, FolderOpen, KanbanSquare, Pencil, Timer } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProfile } from "@/components/auth/AuthProvider";
 import { BackLink, Loading, NotFound, RecordFields, Tabs, WithRecordId } from "@/components/common/DetailShell";
 import { NoAccess } from "@/components/resource/ModulePage";
@@ -16,6 +16,7 @@ import { canRead, INTERNAL_ROLES, type Role } from "@/config/roles";
 import { useLiveQuery, useRecord, useRecordsWhere } from "@/hooks/useCollection";
 import { moduleAccess } from "@/lib/access";
 import { db } from "@/lib/firebase";
+import { updateRecord } from "@/lib/records";
 import { TASK_COLUMNS, type ChecklistEntry, type ProjectAsset, type ProjectTask } from "@/lib/projectWork";
 import type { BaseRecord } from "@/types";
 import { DealDocuments } from "@/components/documents/DealDocuments";
@@ -59,6 +60,16 @@ function ProjectDetail({ id }: { id: string }) {
   const hours = useRecordsWhere("timesheets", "projectId", seesHours ? id : null);
   const seesDocs = canRead(role, "documents");
   const { data: client } = useRecord("clients", seesDocs && canRead(role, "clients") ? ((project?.clientId as string | undefined) ?? null) : null);
+
+  // Progress follows the task planner: tasks done ÷ all tasks. Saved on the project so lists and the dashboard show it too.
+  const progress = taskProgress(tasks.data);
+  const onTeam = Boolean(profile.employeeId) && ((project?.teamIds as string[] | undefined) ?? []).includes(profile.employeeId!);
+  const savesProgress = role === "admin" || role === "project_manager" || (role === "staff" && onTeam);
+  const stored = project ? Number(project.progress) || 0 : null;
+  useEffect(() => {
+    if (!seesWork || !savesProgress || tasks.loading || stored === null || stored === progress) return;
+    updateRecord("projects", id, { progress }).catch(() => {});
+  }, [seesWork, savesProgress, tasks.loading, stored, progress, id]);
 
   if (loading) return <Loading />;
   if (!project) return <NotFound what="project" />;
@@ -105,6 +116,7 @@ function ProjectDetail({ id }: { id: string }) {
           project={project}
           role={role}
           tasks={seesWork ? tasks.data : null}
+          progress={seesWork && !tasks.loading ? progress : null}
           assets={seesWork ? assets.data : null}
           checklist={seesWork ? checklist.data : null}
           hours={seesHours ? hours.data.reduce((t, h) => t + (Number(h.hours) || 0), 0) : null}
@@ -147,6 +159,7 @@ function Summary({
   project,
   role,
   tasks,
+  progress: fromTasks,
   assets,
   checklist,
   hours,
@@ -155,12 +168,13 @@ function Summary({
   project: BaseRecord;
   role: Role;
   tasks: ProjectTask[] | null;
+  progress: number | null;
   assets: ProjectAsset[] | null;
   checklist: ChecklistEntry[] | null;
   hours: number | null;
   onOpen: (t: Tab) => void;
 }) {
-  const progress = Math.max(0, Math.min(100, Number(project.progress) || 0));
+  const progress = fromTasks ?? Math.max(0, Math.min(100, Number(project.progress) || 0));
   const done = (tasks ?? []).filter((t) => t.status === "done").length;
   const ticked = (checklist ?? []).filter((c) => c.done).length;
   const files = (assets ?? []).filter((a) => a.kind === "file").length;
@@ -177,6 +191,7 @@ function Summary({
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-tint-strong">
             <div className="h-full rounded-full bg-gradient-to-r from-accent-cyan to-brand-600" style={{ width: `${progress}%` }} />
           </div>
+          <p className="mt-1.5 text-xs text-subtle">Worked out from the task planner: tasks done out of all tasks.</p>
         </div>
         <RecordFields module={projectsModule} record={project} role={role} exclude={["progress"]} />
       </Card>
@@ -234,4 +249,10 @@ function SummaryTile({
   ) : (
     <Card className="p-3.5 sm:p-5">{body}</Card>
   );
+}
+
+/** Percent of the project's tasks that are done (0 when the planner is empty). */
+function taskProgress(tasks: ProjectTask[]) {
+  if (!tasks.length) return 0;
+  return Math.round((tasks.filter((t) => t.status === "done").length / tasks.length) * 100);
 }

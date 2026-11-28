@@ -22,7 +22,8 @@ service firebase.storage {
 
     // Sales gallery: gallery/sales/{fileId}/{file name}, plus a thumbnail next to it.
     match /gallery/sales/{fileId}/{name} {
-      allow read: if hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'staff', 'investor', 'viewer']);
+      // Other Staff don't see sales material.
+      allow read: if hasRole(['admin', 'project_manager', 'hr_manager', 'sales', 'investor', 'viewer']);
       allow create, update: if hasRole(['admin', 'sales']) && sizeOk();
       allow delete: if hasRole(['admin', 'sales']);
     }

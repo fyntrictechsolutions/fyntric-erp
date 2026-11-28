@@ -22,6 +22,7 @@ export function scopedQuery(module: ModuleKey, profile: UserProfile, ownOnly = f
   if (read === "all") return ref;
   if (read === "own") return query(ref, where("userId", "==", profile.id));
   if (read === "client") return profile.clientId ? query(ref, where("clientId", "==", profile.clientId)) : null;
+  if (read === "team") return profile.employeeId ? query(ref, where("teamIds", "array-contains", profile.employeeId)) : null;
   return null;
 }
 

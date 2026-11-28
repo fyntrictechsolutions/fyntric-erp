@@ -156,7 +156,9 @@ const GUIDE: Section[] = [
         module: "projects",
         href: "/projects",
         steps: [
-          "Projects → click a project to open it. Summary shows its details, progress and counts.",
+          "Projects → New project or Edit project: pick the project manager (only admins and project managers are listed) and tick the team members under Team.",
+          "Other Staff see only the projects whose team they're in, in the project list and on their dashboard.",
+          "Click a project to open it. Summary shows its details and counts. Progress fills in by itself: tasks in Done out of all tasks on the planner.",
           "Task planner: Add task, assign it to a team member and drag the card across To do, In progress, In review and Done. On a phone, press and hold a card before dragging, or open it and change the status.",
           "Team members see the board and move the tasks assigned to them. Admins and project managers add, edit and delete tasks.",
           "Assets: upload files (designs, documents) and write notes (logins, hosting details) for the project.",

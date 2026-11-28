@@ -45,7 +45,7 @@ export function RecordEditor({ module, record, preset, title, onClose, onSaved }
   // A new record opened with a reference already picked (e.g. from a link) fills in from it, as picking it would.
   useEffect(() => {
     if (record || !preset) return;
-    const field = module.fields.find((f) => f.fill && f.reference && f.reference.module !== "team" && typeof preset[f.name] === "string" && preset[f.name]);
+    const field = module.fields.find((f) => f.fill && f.reference && f.reference.module !== "team" && f.reference.module !== "managers" && typeof preset[f.name] === "string" && preset[f.name]);
     if (!field) return;
     let live = true;
     (async () => {

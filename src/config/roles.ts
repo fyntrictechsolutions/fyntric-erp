@@ -39,7 +39,7 @@ export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   project_manager: "Owns projects and timesheets, edits attendance, and can see sales and finance for delivery.",
   hr_manager: "Runs hiring, salaries, payroll, resignations and leave approvals, and sees the team's employee records and attendance.",
   sales: "Works leads, follow-ups, estimates, clients and invoices, and records payments received.",
-  staff: "Checks in, applies for leave, logs timesheets and claims expenses.",
+  staff: "Checks in, applies for leave, logs timesheets, claims expenses, and works on the projects whose team they're in.",
   client: "Sees only their own company's projects and invoices.",
   investor: "Read-only view of the business: projects, finance, purchases and reports.",
   viewer: "Read-only view of sales, projects, team and reports.",
@@ -84,9 +84,10 @@ export type ModuleKey =
  * - "all": every record
  * - "own": only records the user created (matched on `userId`)
  * - "client": only records linked to the user's client account (matched on `clientId`)
+ * - "team": only records whose `teamIds` include the user's employee record (projects they work on)
  * - "none": the module is hidden
  */
-export type ReadScope = "all" | "own" | "client" | "none";
+export type ReadScope = "all" | "own" | "client" | "team" | "none";
 
 export interface ModulePermission {
   read: ReadScope;
@@ -153,14 +154,16 @@ export const PERMISSIONS: Record<ModuleKey, Record<Role, ModulePermission>> = {
   followups: row({ sales: FULL, project_manager: READ_ALL, viewer: READ_ALL }),
   estimates: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
   clients: row({ sales: FULL, project_manager: READ_ALL, investor: READ_ALL, viewer: READ_ALL }),
-  products: row({ ...staffWide(READ_ALL), sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
+  // Other Staff (engineering) don't see selling prices or sales material: the Sales section is hidden for them.
+  products: row({ ...staffWide(READ_ALL), staff: NONE, sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
   // Files about products (photos, brochures, demo videos): same people as the price list.
-  salesGallery: row({ ...staffWide(READ_ALL), sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
+  salesGallery: row({ ...staffWide(READ_ALL), staff: NONE, sales: FULL, investor: READ_ALL, viewer: READ_ALL }),
   // Company profile, case studies, NDAs, questionnaires, proposals and agreements.
   documents: row({ sales: FULL, project_manager: READ_ALL }),
 
   // Delivery
-  projects: row({ ...staffWide(READ_ALL), project_manager: FULL, client: CLIENT_READ, investor: READ_ALL, viewer: READ_ALL }),
+  // Other Staff see only the projects whose team they're in.
+  projects: row({ ...staffWide(READ_ALL), staff: { read: "team", create: false, update: "none", delete: "none" }, project_manager: FULL, client: CLIENT_READ, investor: READ_ALL, viewer: READ_ALL }),
   timesheets: row({ ...staffWide(OWN), project_manager: FULL }),
 
   // Purchases
@@ -233,6 +236,7 @@ export function canRead(role: UserRole | undefined, module: ModuleKey): boolean 
 export function describePermission(p: ModulePermission): string {
   if (p.read === "none") return "—";
   if (p.read === "client") return "Own company";
+  if (p.read === "team") return "Their team's (view)";
   if (p.read === "own") return p.create ? "Own entries" : "Own (view)";
   if (p.update === "all" && p.delete === "all") return "Full";
   if (p.update === "all") return "Add & edit";

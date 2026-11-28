@@ -26,6 +26,7 @@ export type FieldType =
   | "multiselect"
   | "checkbox"
   | "reference"
+  | "references"
   | "items";
 
 export interface FieldDefinition {
@@ -43,8 +44,16 @@ export interface FieldDefinition {
    * For "reference" fields: which module to pick from and which field to show. The label is saved as `<name>Label`.
    * `module: "team"` picks a registered team member (an active user with a staff role); admins see everyone,
    * others can only pick themselves, since only admins may list user accounts.
+   * `module: "managers"` picks a user whose role is Admin or Project Manager (admins and project managers can list them).
+   * "references" fields pick several records: ids in `<name>`, their labels in `<name>Label`.
    */
-  reference?: { module: ModuleKey | "team"; labelField: string; format?: (record: BaseRecord) => string };
+  reference?: {
+    module: ModuleKey | "team" | "managers";
+    labelField: string;
+    format?: (record: BaseRecord) => string;
+    /** Only records this returns true for can be picked (saved choices still show). */
+    filter?: (record: BaseRecord) => boolean;
+  };
   /**
    * "reference" fields: picking a record fills other fields of the form from it (e.g. an invoice from an estimate).
    * Returns the values to set, and a short note shown under the field. Everything stays editable afterwards.
@@ -154,6 +163,8 @@ export interface ModuleDefinition {
   searchFields: string[];
   /** Select field used for the status filter chips. */
   statusField?: string;
+  /** A second row of filter chips on the list page (a select field), e.g. employment type. */
+  secondFilterField?: string;
   /** Column heading for the record owner, shown to people who see everyone's records (e.g. "Employee"). */
   ownerLabel?: string;
   actions?: RecordAction[];
